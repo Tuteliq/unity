@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Validate package.json
+        run: |
+          if [ ! -f "package.json" ]; then
+            echo "package.json not found!"
+            exit 1
+          fi
+          echo "package.json exists"
+
+      - name: Check required files
+        run: |
+          files=("README.md" "LICENSE.md" "CHANGELOG.md" "Runtime/SafeNest.Runtime.asmdef")
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required file: $file"
+              exit 1
+            fi
+          done
+          echo "All required files present"
+
+      - name: Validate assembly definitions
+        run: |
+          for asmdef in $(find . -name "*.asmdef"); do
+            echo "Validating $asmdef"
+            python3 -c "import json; json.load(open('$asmdef'))"
+          done

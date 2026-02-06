@@ -1,0 +1,291 @@
+using System;
+using System.Collections.Generic;
+
+namespace SafeNest
+{
+    // =========================================================================
+    // Context
+    // =========================================================================
+
+    /// <summary>
+    /// Optional context for analysis.
+    /// </summary>
+    [Serializable]
+    public class AnalysisContext
+    {
+        public string Language;
+        public string AgeGroup;
+        public string Relationship;
+        public string Platform;
+    }
+
+    // =========================================================================
+    // Messages
+    // =========================================================================
+
+    /// <summary>
+    /// Message for grooming detection.
+    /// </summary>
+    [Serializable]
+    public class GroomingMessage
+    {
+        public MessageRole Role;
+        public string Content;
+
+        public GroomingMessage() { }
+
+        public GroomingMessage(MessageRole role, string content)
+        {
+            Role = role;
+            Content = content;
+        }
+    }
+
+    /// <summary>
+    /// Message for emotion analysis.
+    /// </summary>
+    [Serializable]
+    public class EmotionMessage
+    {
+        public string Sender;
+        public string Content;
+
+        public EmotionMessage() { }
+
+        public EmotionMessage(string sender, string content)
+        {
+            Sender = sender;
+            Content = content;
+        }
+    }
+
+    /// <summary>
+    /// Message for incident reports.
+    /// </summary>
+    [Serializable]
+    public class ReportMessage
+    {
+        public string Sender;
+        public string Content;
+
+        public ReportMessage() { }
+
+        public ReportMessage(string sender, string content)
+        {
+            Sender = sender;
+            Content = content;
+        }
+    }
+
+    // =========================================================================
+    // Input Types
+    // =========================================================================
+
+    /// <summary>
+    /// Input for bullying detection.
+    /// </summary>
+    public class DetectBullyingInput
+    {
+        public string Content;
+        public AnalysisContext Context;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for grooming detection.
+    /// </summary>
+    public class DetectGroomingInput
+    {
+        public List<GroomingMessage> Messages;
+        public int? ChildAge;
+        public AnalysisContext Context;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for unsafe content detection.
+    /// </summary>
+    public class DetectUnsafeInput
+    {
+        public string Content;
+        public AnalysisContext Context;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for quick analysis.
+    /// </summary>
+    public class AnalyzeInput
+    {
+        public string Content;
+        public AnalysisContext Context;
+        public List<string> Include;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for emotion analysis.
+    /// </summary>
+    public class AnalyzeEmotionsInput
+    {
+        public string Content;
+        public List<EmotionMessage> Messages;
+        public AnalysisContext Context;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for action plan generation.
+    /// </summary>
+    public class GetActionPlanInput
+    {
+        public string Situation;
+        public int? ChildAge;
+        public Audience? Audience;
+        public Severity? Severity;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for incident report generation.
+    /// </summary>
+    public class GenerateReportInput
+    {
+        public List<ReportMessage> Messages;
+        public int? ChildAge;
+        public string IncidentType;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    // =========================================================================
+    // Result Types
+    // =========================================================================
+
+    /// <summary>
+    /// Result of bullying detection.
+    /// </summary>
+    [Serializable]
+    public class BullyingResult
+    {
+        public bool IsBullying;
+        public Severity Severity;
+        public List<string> BullyingType;
+        public float Confidence;
+        public string Rationale;
+        public float RiskScore;
+        public string RecommendedAction;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of grooming detection.
+    /// </summary>
+    [Serializable]
+    public class GroomingResult
+    {
+        public GroomingRisk GroomingRisk;
+        public List<string> Flags;
+        public float Confidence;
+        public string Rationale;
+        public float RiskScore;
+        public string RecommendedAction;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of unsafe content detection.
+    /// </summary>
+    [Serializable]
+    public class UnsafeResult
+    {
+        public bool Unsafe;
+        public List<string> Categories;
+        public Severity Severity;
+        public float Confidence;
+        public string Rationale;
+        public float RiskScore;
+        public string RecommendedAction;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of quick analysis.
+    /// </summary>
+    [Serializable]
+    public class AnalyzeResult
+    {
+        public RiskLevel RiskLevel;
+        public float RiskScore;
+        public string Summary;
+        public string RecommendedAction;
+        public BullyingResult Bullying;
+        public UnsafeResult Unsafe;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of emotion analysis.
+    /// </summary>
+    [Serializable]
+    public class EmotionsResult
+    {
+        public List<string> DominantEmotions;
+        public EmotionTrend Trend;
+        public float Intensity;
+        public List<string> ConcerningPatterns;
+        public string RecommendedFollowup;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of action plan generation.
+    /// </summary>
+    [Serializable]
+    public class ActionPlanResult
+    {
+        public List<string> Steps;
+        public string Tone;
+        public List<string> Resources;
+        public string Urgency;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Result of incident report generation.
+    /// </summary>
+    [Serializable]
+    public class ReportResult
+    {
+        public string Summary;
+        public RiskLevel RiskLevel;
+        public List<string> Timeline;
+        public List<string> KeyEvidence;
+        public List<string> RecommendedNextSteps;
+        public string ExternalId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// API usage information.
+    /// </summary>
+    [Serializable]
+    public class Usage
+    {
+        public int Limit;
+        public int Used;
+        public int Remaining;
+    }
+}
