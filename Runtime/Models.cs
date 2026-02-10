@@ -89,6 +89,8 @@ namespace SafeNest
         public string Content;
         public AnalysisContext Context;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -101,6 +103,8 @@ namespace SafeNest
         public int? ChildAge;
         public AnalysisContext Context;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -112,6 +116,8 @@ namespace SafeNest
         public string Content;
         public AnalysisContext Context;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -124,6 +130,8 @@ namespace SafeNest
         public AnalysisContext Context;
         public List<string> Include;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -136,6 +144,8 @@ namespace SafeNest
         public List<EmotionMessage> Messages;
         public AnalysisContext Context;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -149,6 +159,8 @@ namespace SafeNest
         public Audience? Audience;
         public Severity? Severity;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -161,6 +173,8 @@ namespace SafeNest
         public int? ChildAge;
         public string IncidentType;
         public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -182,6 +196,7 @@ namespace SafeNest
         public float RiskScore;
         public string RecommendedAction;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -198,6 +213,7 @@ namespace SafeNest
         public float RiskScore;
         public string RecommendedAction;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -215,6 +231,7 @@ namespace SafeNest
         public float RiskScore;
         public string RecommendedAction;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -231,6 +248,7 @@ namespace SafeNest
         public BullyingResult Bullying;
         public UnsafeResult Unsafe;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -246,6 +264,7 @@ namespace SafeNest
         public List<string> ConcerningPatterns;
         public string RecommendedFollowup;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -260,6 +279,7 @@ namespace SafeNest
         public List<string> Resources;
         public string Urgency;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 
@@ -275,6 +295,7 @@ namespace SafeNest
         public List<string> KeyEvidence;
         public List<string> RecommendedNextSteps;
         public string ExternalId;
+        public string CustomerId;
         public Dictionary<string, object> Metadata;
     }
 

@@ -79,11 +79,13 @@ namespace SafeNest
             string content,
             AnalysisContext context = null,
             string externalId = null,
+            string customerId = null,
             Dictionary<string, object> metadata = null)
         {
             var body = new Dictionary<string, object> { { "text", content } };
             if (context != null) body["context"] = ContextToDict(context);
             if (externalId != null) body["external_id"] = externalId;
+            if (customerId != null) body["customer_id"] = customerId;
             if (metadata != null) body["metadata"] = metadata;
 
             var response = await RequestAsync("/api/v1/safety/bullying", body);
@@ -117,6 +119,7 @@ namespace SafeNest
             if (context.Count > 0) body["context"] = context;
 
             if (input.ExternalId != null) body["external_id"] = input.ExternalId;
+            if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
             if (input.Metadata != null) body["metadata"] = input.Metadata;
 
             var response = await RequestAsync("/api/v1/safety/grooming", body);
@@ -130,11 +133,13 @@ namespace SafeNest
             string content,
             AnalysisContext context = null,
             string externalId = null,
+            string customerId = null,
             Dictionary<string, object> metadata = null)
         {
             var body = new Dictionary<string, object> { { "text", content } };
             if (context != null) body["context"] = ContextToDict(context);
             if (externalId != null) body["external_id"] = externalId;
+            if (customerId != null) body["customer_id"] = customerId;
             if (metadata != null) body["metadata"] = metadata;
 
             var response = await RequestAsync("/api/v1/safety/unsafe", body);
@@ -149,6 +154,7 @@ namespace SafeNest
             AnalysisContext context = null,
             List<string> include = null,
             string externalId = null,
+            string customerId = null,
             Dictionary<string, object> metadata = null)
         {
             var checks = include ?? new List<string> { "bullying", "unsafe" };
@@ -159,13 +165,13 @@ namespace SafeNest
 
             if (checks.Contains("bullying"))
             {
-                bullyingResult = await DetectBullyingAsync(content, context, externalId, metadata);
+                bullyingResult = await DetectBullyingAsync(content, context, externalId, customerId, metadata);
                 maxRiskScore = Math.Max(maxRiskScore, bullyingResult.RiskScore);
             }
 
             if (checks.Contains("unsafe"))
             {
-                unsafeResult = await DetectUnsafeAsync(content, context, externalId, metadata);
+                unsafeResult = await DetectUnsafeAsync(content, context, externalId, customerId, metadata);
                 maxRiskScore = Math.Max(maxRiskScore, unsafeResult.RiskScore);
             }
 
@@ -205,6 +211,7 @@ namespace SafeNest
                 Unsafe = unsafeResult,
                 RecommendedAction = recommendedAction,
                 ExternalId = externalId,
+                CustomerId = customerId,
                 Metadata = metadata
             };
         }
@@ -220,6 +227,7 @@ namespace SafeNest
             string content,
             AnalysisContext context = null,
             string externalId = null,
+            string customerId = null,
             Dictionary<string, object> metadata = null)
         {
             var body = new Dictionary<string, object>
@@ -232,6 +240,7 @@ namespace SafeNest
             };
             if (context != null) body["context"] = ContextToDict(context);
             if (externalId != null) body["external_id"] = externalId;
+            if (customerId != null) body["customer_id"] = customerId;
             if (metadata != null) body["metadata"] = metadata;
 
             var response = await RequestAsync("/api/v1/analysis/emotions", body);
@@ -256,6 +265,7 @@ namespace SafeNest
             if (input.ChildAge.HasValue) body["child_age"] = input.ChildAge.Value;
             if (input.Severity.HasValue) body["severity"] = input.Severity.Value.ToApiString();
             if (input.ExternalId != null) body["external_id"] = input.ExternalId;
+            if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
             if (input.Metadata != null) body["metadata"] = input.Metadata;
 
             var response = await RequestAsync("/api/v1/guidance/action-plan", body);
@@ -289,6 +299,7 @@ namespace SafeNest
             if (meta.Count > 0) body["meta"] = meta;
 
             if (input.ExternalId != null) body["external_id"] = input.ExternalId;
+            if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
             if (input.Metadata != null) body["metadata"] = input.Metadata;
 
             var response = await RequestAsync("/api/v1/reports/incident", body);
@@ -488,6 +499,7 @@ namespace SafeNest
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
@@ -503,6 +515,7 @@ namespace SafeNest
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
@@ -519,6 +532,7 @@ namespace SafeNest
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
@@ -533,6 +547,7 @@ namespace SafeNest
                 ConcerningPatterns = GetStringList(data, "concerning_patterns"),
                 RecommendedFollowup = GetString(data, "recommended_followup"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
@@ -546,6 +561,7 @@ namespace SafeNest
                 Resources = GetStringList(data, "resources"),
                 Urgency = GetString(data, "urgency"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
@@ -560,6 +576,7 @@ namespace SafeNest
                 KeyEvidence = GetStringList(data, "key_evidence"),
                 RecommendedNextSteps = GetStringList(data, "recommended_next_steps"),
                 ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
                 Metadata = GetDict(data, "metadata")
             };
         }
