@@ -650,6 +650,156 @@ namespace Tuteliq
         }
 
         // =====================================================================
+        // Fraud / Extended Detection
+        // =====================================================================
+
+        /// <summary>
+        /// Detect social engineering attempts.
+        /// </summary>
+        public async Task<DetectionResult> DetectSocialEngineeringAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/social-engineering", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect app fraud patterns.
+        /// </summary>
+        public async Task<DetectionResult> DetectAppFraudAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/app-fraud", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect romance scam patterns.
+        /// </summary>
+        public async Task<DetectionResult> DetectRomanceScamAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/romance-scam", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect mule recruitment attempts.
+        /// </summary>
+        public async Task<DetectionResult> DetectMuleRecruitmentAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/mule-recruitment", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect gambling harm indicators.
+        /// </summary>
+        public async Task<DetectionResult> DetectGamblingHarmAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/gambling-harm", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect coercive control patterns.
+        /// </summary>
+        public async Task<DetectionResult> DetectCoerciveControlAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/coercive-control", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect vulnerability exploitation attempts.
+        /// </summary>
+        public async Task<DetectionResult> DetectVulnerabilityExploitationAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/vulnerability-exploitation", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        /// <summary>
+        /// Detect radicalisation indicators.
+        /// </summary>
+        public async Task<DetectionResult> DetectRadicalisationAsync(DetectionInput input)
+        {
+            var data = await RequestAsync("POST", "/api/v1/fraud/radicalisation", BuildDetectionBody(input));
+            return ParseDetectionResult(data);
+        }
+
+        // =====================================================================
+        // Multi-Endpoint Analysis
+        // =====================================================================
+
+        /// <summary>
+        /// Run multiple detection endpoints in a single request.
+        /// </summary>
+        public async Task<AnalyseMultiResult> AnalyseMultiAsync(AnalyseMultiInput input)
+        {
+            var endpoints = new List<string>();
+            if (input.Detections != null)
+            {
+                foreach (var d in input.Detections)
+                    endpoints.Add(d.ToApiString());
+            }
+
+            var body = new Dictionary<string, object>
+            {
+                ["text"] = input.Content,
+                ["endpoints"] = endpoints
+            };
+
+            var ctx = input.Context != null ? ContextToDict(input.Context) : new Dictionary<string, object>();
+            ctx["platform"] = ResolvePlatform(input.Context?.Platform);
+            body["context"] = ctx;
+
+            var options = new Dictionary<string, object>();
+            if (input.IncludeEvidence) options["include_evidence"] = true;
+            if (options.Count > 0) body["options"] = options;
+
+            if (input.ExternalId != null) body["external_id"] = input.ExternalId;
+            if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
+            if (input.Metadata != null) body["metadata"] = input.Metadata;
+
+            var data = await RequestAsync("POST", "/api/v1/analyse/multi", body);
+            return ParseAnalyseMultiResult(data);
+        }
+
+        // =====================================================================
+        // Video Analysis
+        // =====================================================================
+
+        /// <summary>
+        /// Analyze video content for safety concerns.
+        /// </summary>
+        public async Task<VideoAnalysisResult> AnalyzeVideoAsync(
+            byte[] file,
+            string filename,
+            string analysisType = "all",
+            string fileId = null,
+            string externalId = null,
+            string customerId = null,
+            Dictionary<string, object> metadata = null,
+            string ageGroup = null,
+            string language = null,
+            string platform = null,
+            int? childAge = null)
+        {
+            var formSections = new List<IMultipartFormSection>();
+            formSections.Add(new MultipartFormFileSection("file", file, filename, "application/octet-stream"));
+            formSections.Add(new MultipartFormDataSection("analysis_type", analysisType));
+            formSections.Add(new MultipartFormDataSection("platform", ResolvePlatform(platform)));
+            if (fileId != null) formSections.Add(new MultipartFormDataSection("file_id", fileId));
+            if (externalId != null) formSections.Add(new MultipartFormDataSection("external_id", externalId));
+            if (customerId != null) formSections.Add(new MultipartFormDataSection("customer_id", customerId));
+            if (metadata != null) formSections.Add(new MultipartFormDataSection("metadata", MiniJson.Serialize(metadata)));
+            if (ageGroup != null) formSections.Add(new MultipartFormDataSection("age_group", ageGroup));
+            if (language != null) formSections.Add(new MultipartFormDataSection("language", language));
+            if (childAge.HasValue) formSections.Add(new MultipartFormDataSection("child_age", childAge.Value.ToString()));
+
+            var data = await MultipartRequestAsync("/api/v1/safety/video", formSections);
+            return ParseVideoAnalysisResult(data);
+        }
+
+        // =====================================================================
         // Webhooks
         // =====================================================================
 
@@ -1052,6 +1202,28 @@ namespace Tuteliq
                 sb.Append("]");
                 return sb.ToString();
             }
+            if (value is IList<string> strList)
+            {
+                var sb = new StringBuilder("[");
+                for (int i = 0; i < strList.Count; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append($"\"{EscapeString(strList[i])}\"");
+                }
+                sb.Append("]");
+                return sb.ToString();
+            }
+            if (value is IList<object> objList)
+            {
+                var sb = new StringBuilder("[");
+                for (int i = 0; i < objList.Count; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append(SerializeValue(objList[i]));
+                }
+                sb.Append("]");
+                return sb.ToString();
+            }
             return $"\"{value}\"";
         }
 
@@ -1079,6 +1251,8 @@ namespace Tuteliq
                 Rationale = GetString(data, "rationale"),
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
+                Language = GetString(data, "language"),
+                LanguageStatus = GetString(data, "language_status"),
                 CreditsUsed = GetNullableInt(data, "credits_used"),
                 ExternalId = GetString(data, "external_id"),
                 CustomerId = GetString(data, "customer_id"),
@@ -1096,6 +1270,8 @@ namespace Tuteliq
                 Rationale = GetString(data, "rationale"),
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
+                Language = GetString(data, "language"),
+                LanguageStatus = GetString(data, "language_status"),
                 CreditsUsed = GetNullableInt(data, "credits_used"),
                 ExternalId = GetString(data, "external_id"),
                 CustomerId = GetString(data, "customer_id"),
@@ -1114,6 +1290,8 @@ namespace Tuteliq
                 Rationale = GetString(data, "rationale"),
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
+                Language = GetString(data, "language"),
+                LanguageStatus = GetString(data, "language_status"),
                 CreditsUsed = GetNullableInt(data, "credits_used"),
                 ExternalId = GetString(data, "external_id"),
                 CustomerId = GetString(data, "customer_id"),
@@ -1244,6 +1422,177 @@ namespace Tuteliq
                     ContainsFaces = GetNullableBool(visionDict, "contains_faces")
                 };
             }
+
+            return result;
+        }
+
+        private Dictionary<string, object> BuildDetectionBody(DetectionInput input)
+        {
+            var body = new Dictionary<string, object> { ["text"] = input.Content };
+            var ctx = input.Context != null ? ContextToDict(input.Context) : new Dictionary<string, object>();
+            ctx["platform"] = ResolvePlatform(input.Context?.Platform);
+            body["context"] = ctx;
+            if (input.IncludeEvidence) body["include_evidence"] = true;
+            if (input.ExternalId != null) body["external_id"] = input.ExternalId;
+            if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
+            if (input.Metadata != null) body["metadata"] = input.Metadata;
+            return body;
+        }
+
+        private DetectionCategory ParseDetectionCategory(Dictionary<string, object> data)
+        {
+            return new DetectionCategory
+            {
+                Tag = GetString(data, "tag"),
+                Label = GetString(data, "label"),
+                Confidence = GetDouble(data, "confidence")
+            };
+        }
+
+        private DetectionEvidence ParseDetectionEvidence(Dictionary<string, object> data)
+        {
+            return new DetectionEvidence
+            {
+                Text = GetString(data, "text"),
+                Tactic = GetString(data, "tactic"),
+                Weight = GetDouble(data, "weight")
+            };
+        }
+
+        private AgeCalibration ParseAgeCalibration(Dictionary<string, object> data)
+        {
+            return new AgeCalibration
+            {
+                Applied = GetBool(data, "applied"),
+                AgeGroup = GetString(data, "age_group"),
+                Multiplier = GetNullableDouble(data, "multiplier")
+            };
+        }
+
+        private DetectionResult ParseDetectionResult(Dictionary<string, object> data)
+        {
+            var result = new DetectionResult
+            {
+                Endpoint = GetString(data, "endpoint"),
+                Detected = GetBool(data, "detected"),
+                Severity = GetDouble(data, "severity"),
+                Confidence = GetDouble(data, "confidence"),
+                RiskScore = GetDouble(data, "risk_score"),
+                Level = GetString(data, "level"),
+                RecommendedAction = GetString(data, "recommended_action"),
+                Rationale = GetString(data, "rationale"),
+                Language = GetString(data, "language"),
+                LanguageStatus = GetString(data, "language_status"),
+                CreditsUsed = GetNullableInt(data, "credits_used"),
+                ProcessingTimeMs = GetNullableDouble(data, "processing_time_ms"),
+                ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
+                Metadata = GetDict(data, "metadata")
+            };
+
+            var categories = new List<DetectionCategory>();
+            if (data.ContainsKey("categories") && data["categories"] is IList<object> catList)
+            {
+                foreach (var item in catList)
+                {
+                    if (item is Dictionary<string, object> dict)
+                        categories.Add(ParseDetectionCategory(dict));
+                }
+            }
+            result.Categories = categories;
+
+            var evidence = new List<DetectionEvidence>();
+            if (data.ContainsKey("evidence") && data["evidence"] is IList<object> evList)
+            {
+                foreach (var item in evList)
+                {
+                    if (item is Dictionary<string, object> dict)
+                        evidence.Add(ParseDetectionEvidence(dict));
+                }
+            }
+            result.Evidence = evidence;
+
+            if (data.ContainsKey("age_calibration") && data["age_calibration"] is Dictionary<string, object> ageDict)
+                result.AgeCalibration = ParseAgeCalibration(ageDict);
+
+            return result;
+        }
+
+        private AnalyseMultiSummary ParseAnalyseMultiSummary(Dictionary<string, object> data)
+        {
+            return new AnalyseMultiSummary
+            {
+                TotalEndpoints = GetInt(data, "total_endpoints"),
+                DetectedCount = GetInt(data, "detected_count"),
+                HighestRisk = GetDict(data, "highest_risk"),
+                OverallRiskLevel = GetString(data, "overall_risk_level")
+            };
+        }
+
+        private AnalyseMultiResult ParseAnalyseMultiResult(Dictionary<string, object> data)
+        {
+            var result = new AnalyseMultiResult
+            {
+                CrossEndpointModifier = GetNullableDouble(data, "cross_endpoint_modifier"),
+                CreditsUsed = GetNullableInt(data, "credits_used"),
+                ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
+                Metadata = GetDict(data, "metadata")
+            };
+
+            var results = new List<DetectionResult>();
+            if (data.ContainsKey("results") && data["results"] is IList<object> list)
+            {
+                foreach (var item in list)
+                {
+                    if (item is Dictionary<string, object> dict)
+                        results.Add(ParseDetectionResult(dict));
+                }
+            }
+            result.Results = results;
+
+            if (data.ContainsKey("summary") && data["summary"] is Dictionary<string, object> summaryDict)
+                result.Summary = ParseAnalyseMultiSummary(summaryDict);
+
+            return result;
+        }
+
+        private VideoSafetyFinding ParseVideoSafetyFinding(Dictionary<string, object> data)
+        {
+            return new VideoSafetyFinding
+            {
+                FrameIndex = GetInt(data, "frame_index"),
+                Timestamp = GetDouble(data, "timestamp"),
+                Description = GetString(data, "description"),
+                Categories = GetStringList(data, "categories"),
+                Severity = GetDouble(data, "severity")
+            };
+        }
+
+        private VideoAnalysisResult ParseVideoAnalysisResult(Dictionary<string, object> data)
+        {
+            var result = new VideoAnalysisResult
+            {
+                FileId = GetString(data, "file_id"),
+                FramesAnalyzed = GetInt(data, "frames_analyzed"),
+                OverallRiskScore = GetDouble(data, "overall_risk_score"),
+                OverallSeverity = GetString(data, "overall_severity"),
+                CreditsUsed = GetNullableInt(data, "credits_used"),
+                ExternalId = GetString(data, "external_id"),
+                CustomerId = GetString(data, "customer_id"),
+                Metadata = GetDict(data, "metadata")
+            };
+
+            var findings = new List<VideoSafetyFinding>();
+            if (data.ContainsKey("safety_findings") && data["safety_findings"] is IList<object> list)
+            {
+                foreach (var item in list)
+                {
+                    if (item is Dictionary<string, object> dict)
+                        findings.Add(ParseVideoSafetyFinding(dict));
+                }
+            }
+            result.SafetyFindings = findings;
 
             return result;
         }

@@ -195,6 +195,8 @@ namespace Tuteliq
         public string Rationale;
         public float RiskScore;
         public string RecommendedAction;
+        public string Language;
+        public string LanguageStatus;
         public int? CreditsUsed;
         public string ExternalId;
         public string CustomerId;
@@ -213,6 +215,8 @@ namespace Tuteliq
         public string Rationale;
         public float RiskScore;
         public string RecommendedAction;
+        public string Language;
+        public string LanguageStatus;
         public int? CreditsUsed;
         public string ExternalId;
         public string CustomerId;
@@ -232,6 +236,8 @@ namespace Tuteliq
         public string Rationale;
         public float RiskScore;
         public string RecommendedAction;
+        public string Language;
+        public string LanguageStatus;
         public int? CreditsUsed;
         public string ExternalId;
         public string CustomerId;
@@ -521,6 +527,159 @@ namespace Tuteliq
         public VisionResult Vision;
         public Dictionary<string, object> TextAnalysis;
         public double? OverallRiskScore;
+        public string OverallSeverity;
+        public int? CreditsUsed;
+        public string ExternalId;
+        public string CustomerId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    // =========================================================================
+    // Fraud / Extended Detection
+    // =========================================================================
+
+    /// <summary>
+    /// Input for fraud and extended detection endpoints.
+    /// </summary>
+    public class DetectionInput
+    {
+        public string Content;
+        public AnalysisContext Context;
+        public bool IncludeEvidence;
+        public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Input for multi-endpoint analysis.
+    /// </summary>
+    public class AnalyseMultiInput
+    {
+        public string Content;
+        public List<Detection> Detections;
+        public AnalysisContext Context;
+        public bool IncludeEvidence;
+        public string ExternalId;
+        /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
+        public string CustomerId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// A detected category within a detection result.
+    /// </summary>
+    [Serializable]
+    public class DetectionCategory
+    {
+        public string Tag;
+        public string Label;
+        public double Confidence;
+    }
+
+    /// <summary>
+    /// Evidence supporting a detection result.
+    /// </summary>
+    [Serializable]
+    public class DetectionEvidence
+    {
+        public string Text;
+        public string Tactic;
+        public double Weight;
+    }
+
+    /// <summary>
+    /// Age calibration applied to detection scoring.
+    /// </summary>
+    [Serializable]
+    public class AgeCalibration
+    {
+        public bool Applied;
+        public string AgeGroup;
+        public double? Multiplier;
+    }
+
+    /// <summary>
+    /// Result from a single fraud/extended detection endpoint.
+    /// </summary>
+    [Serializable]
+    public class DetectionResult
+    {
+        public string Endpoint;
+        public bool Detected;
+        public double Severity;
+        public double Confidence;
+        public double RiskScore;
+        public string Level;
+        public List<DetectionCategory> Categories;
+        public string RecommendedAction;
+        public string Rationale;
+        public string Language;
+        public string LanguageStatus;
+        public List<DetectionEvidence> Evidence;
+        public AgeCalibration AgeCalibration;
+        public int? CreditsUsed;
+        public double? ProcessingTimeMs;
+        public string ExternalId;
+        public string CustomerId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    /// <summary>
+    /// Summary of multi-endpoint analysis results.
+    /// </summary>
+    [Serializable]
+    public class AnalyseMultiSummary
+    {
+        public int TotalEndpoints;
+        public int DetectedCount;
+        public Dictionary<string, object> HighestRisk;
+        public string OverallRiskLevel;
+    }
+
+    /// <summary>
+    /// Result of multi-endpoint analysis.
+    /// </summary>
+    [Serializable]
+    public class AnalyseMultiResult
+    {
+        public List<DetectionResult> Results;
+        public AnalyseMultiSummary Summary;
+        public double? CrossEndpointModifier;
+        public int? CreditsUsed;
+        public string ExternalId;
+        public string CustomerId;
+        public Dictionary<string, object> Metadata;
+    }
+
+    // =========================================================================
+    // Video Analysis
+    // =========================================================================
+
+    /// <summary>
+    /// A safety finding from video frame analysis.
+    /// </summary>
+    [Serializable]
+    public class VideoSafetyFinding
+    {
+        public int FrameIndex;
+        public double Timestamp;
+        public string Description;
+        public List<string> Categories;
+        public double Severity;
+    }
+
+    /// <summary>
+    /// Result of video analysis.
+    /// </summary>
+    [Serializable]
+    public class VideoAnalysisResult
+    {
+        public string FileId;
+        public int FramesAnalyzed;
+        public List<VideoSafetyFinding> SafetyFindings;
+        public double OverallRiskScore;
         public string OverallSeverity;
         public int? CreditsUsed;
         public string ExternalId;
