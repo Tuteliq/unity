@@ -5,7 +5,7 @@
   "description": "Official Unity SDK for Tuteliq - AI-powered child safety API for content moderation, bullying detection, and grooming prevention.",
   "unity": "2021.3",
   "unityRelease": "0f1",
-  "documentationUrl": "https://api.tuteliq.ai/docs",
+  "documentationUrl": "https://docs.tuteliq.ai",
   "changelogUrl": "https://github.com/Tuteliq/unity/blob/main/CHANGELOG.md",
   "licensesUrl": "https://github.com/Tuteliq/unity/blob/main/LICENSE.md",
   "keywords": [
