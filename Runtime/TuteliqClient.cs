@@ -310,7 +310,7 @@ namespace Tuteliq
         // =====================================================================
 
         /// <summary>
-        /// Delete all account data (GDPR Article 17 — Right to Erasure).
+        /// Delete all account data (GDPR Article 17: Right to Erasure).
         /// </summary>
         public async Task<AccountDeletionResult> DeleteAccountDataAsync()
         {
@@ -323,7 +323,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Export all account data as JSON (GDPR Article 20 — Right to Data Portability).
+        /// Export all account data as JSON (GDPR Article 20: Right to Data Portability).
         /// </summary>
         public async Task<AccountExportResult> ExportAccountDataAsync()
         {
@@ -380,7 +380,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Rectify user data (GDPR Article 16 — Right to Rectification).
+        /// Rectify user data (GDPR Article 16: Right to Rectification).
         /// </summary>
         public async Task<RectifyDataResult> RectifyDataAsync(RectifyDataInput input)
         {
@@ -405,7 +405,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Get audit logs (GDPR Article 15 — Right of Access).
+        /// Get audit logs (GDPR Article 15: Right of Access).
         /// </summary>
         public async Task<AuditLogsResult> GetAuditLogsAsync(string action = null, int? limit = null)
         {

@@ -1,8 +1,8 @@
 {
   "name": "dev.tuteliq.sdk",
-  "version": "2.3.1",
+  "version": "2.5.0",
   "displayName": "Tuteliq SDK",
-  "description": "Official Unity SDK for Tuteliq - AI-powered child safety API for content moderation, bullying detection, and grooming prevention.",
+  "description": "Official Unity SDK for Tuteliq - child safety API for content moderation, bullying and grooming detection, nickname screening, age verification and document analysis.",
   "unity": "2021.3",
   "unityRelease": "0f1",
   "documentationUrl": "https://docs.tuteliq.ai",
@@ -15,7 +15,10 @@
     "ai",
     "safety",
     "bullying-detection",
-    "grooming-prevention"
+    "grooming-prevention",
+    "nickname-screening",
+    "age-verification",
+    "document-analysis"
   ],
   "author": {
     "name": "Tuteliq",

@@ -18,7 +18,7 @@ namespace Tuteliq.Tests
             {
                 Name = "Alerts",
                 Url = "https://example.com/hook",
-                Events = new List<string> { "incident.created" }
+                Events = new List<string> { "incident.critical" }
             }));
 
             Assert.AreEqual("POST", transport.Last.Method);
