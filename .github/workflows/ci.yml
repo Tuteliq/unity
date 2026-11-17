@@ -67,6 +67,10 @@ jobs:
       - name: Build Runtime scripts
         run: dotnet build .ci/Runtime/Tuteliq.Runtime.csproj --configuration Release
 
+      # WebGL has no timer threads, so it takes a different retry wait.
+      - name: Build Runtime scripts for WebGL
+        run: dotnet build .ci/Runtime/Tuteliq.Runtime.csproj --configuration Release -p:DefineConstants=UNITY_WEBGL --no-incremental
+
       # Runs Tests/Runtime with NUnit. Requests go to a fake transport; nothing is sent.
       - name: Run tests
         run: dotnet test .ci/Tests/Tuteliq.Tests.csproj --configuration Release --logger "console;verbosity=normal"

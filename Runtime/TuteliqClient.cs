@@ -84,7 +84,19 @@ namespace Tuteliq
             _retryDelay = retryDelay;
             _baseUrl = baseUrl;
             _transport = transport;
-            _delay = delay ?? (wait => Task.Delay(wait));
+            _delay = delay ?? DefaultDelay;
+        }
+
+        // Task.Delay needs timer threads, which WebGL does not have: it never completes there.
+        private static async Task DefaultDelay(TimeSpan wait)
+        {
+#if UNITY_WEBGL
+            var until = UnityEngine.Time.realtimeSinceStartup + (float)wait.TotalSeconds;
+            while (UnityEngine.Time.realtimeSinceStartup < until)
+                await Task.Yield();
+#else
+            await Task.Delay(wait);
+#endif
         }
 
         // =====================================================================
@@ -347,7 +359,7 @@ namespace Tuteliq
                 { "version", input.Version },
                 { "context", new Dictionary<string, object> { { "platform", ResolvePlatform() } } }
             };
-            var response = await RequestAsync("POST", "/api/v1/account/consent", body);
+            var response = await ChangeAsync("POST", "/api/v1/account/consent", body);
             return ParseConsentActionResult(response);
         }
 
@@ -453,7 +465,7 @@ namespace Tuteliq
                 { "reported_by", input.ReportedBy },
                 { "context", new Dictionary<string, object> { { "platform", ResolvePlatform() } } }
             };
-            var response = await RequestAsync("/api/v1/admin/breach", body);
+            var response = await ChangeAsync("POST", "/api/v1/admin/breach", body);
             return new LogBreachResult
             {
                 Message = GetString(response, "message"),
@@ -806,7 +818,7 @@ namespace Tuteliq
                 { "events", input.Events }
             };
             if (input.Headers != null) body["headers"] = input.Headers;
-            var response = await RequestAsync("POST", "/api/v1/webhooks", body);
+            var response = await ChangeAsync("POST", "/api/v1/webhooks", body);
             return new CreateWebhookResult
             {
                 Webhook = ParseWebhookInfo(response),
@@ -848,7 +860,7 @@ namespace Tuteliq
         public async Task<TestWebhookResult> TestWebhookAsync(string webhookId)
         {
             var body = new Dictionary<string, object> { { "webhook_id", webhookId } };
-            var response = await RequestAsync("POST", "/api/v1/webhooks/test", body);
+            var response = await ChangeAsync("POST", "/api/v1/webhooks/test", body);
             return new TestWebhookResult
             {
                 Success = GetBool(response, "success"),
@@ -863,7 +875,7 @@ namespace Tuteliq
         /// </summary>
         public async Task<RegenerateSecretResult> RegenerateWebhookSecretAsync(string webhookId)
         {
-            var response = await RequestAsync("POST", $"/api/v1/webhooks/{Uri.EscapeDataString(webhookId)}/regenerate-secret");
+            var response = await ChangeAsync("POST", $"/api/v1/webhooks/{Uri.EscapeDataString(webhookId)}/regenerate-secret");
             return new RegenerateSecretResult { Secret = GetString(response, "secret") };
         }
 
@@ -936,11 +948,23 @@ namespace Tuteliq
         private Task<Dictionary<string, object>> RequestAsync(
             string method,
             string path,
-            Dictionary<string, object> body = null)
+            Dictionary<string, object> body = null,
+            bool repeatable = true)
         {
             return RetryPolicy.ExecuteAsync(
                 () => SendJsonOnceAsync(method, path, body),
-                _maxRetries, _retryDelay, _delay);
+                _maxRetries, _retryDelay, _delay, repeatable);
+        }
+
+        /// <summary>
+        /// For calls that create or change something: only a rate limit is retried.
+        /// </summary>
+        private Task<Dictionary<string, object>> ChangeAsync(
+            string method,
+            string path,
+            Dictionary<string, object> body = null)
+        {
+            return RequestAsync(method, path, body, repeatable: false);
         }
 
         /// <summary>

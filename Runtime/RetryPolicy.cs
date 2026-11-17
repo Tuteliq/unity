@@ -6,7 +6,10 @@ namespace Tuteliq
     /// <summary>
     /// Which failures are retried and how long to wait between attempts.
     /// Only failures that say nothing was done are retried: rate limits, server
-    /// errors, network errors and timeouts. Anything else (a validation error,
+    /// errors, network errors and timeouts. A call that creates or changes something
+    /// is not repeated after a server error, network error or timeout, because the API
+    /// may have acted on it; only a rate limit, which means nothing ran, is retried.
+    /// Anything else (a validation error,
     /// a conflict, an unknown status) is thrown at once, so a request is never
     /// repeated after the API has answered it.
     /// </summary>
@@ -15,12 +18,12 @@ namespace Tuteliq
         /// <summary>Longest wait honoured from a Retry-After header.</summary>
         public static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(60);
 
-        public static bool IsRetryable(Exception error)
+        public static bool IsRetryable(Exception error, bool repeatable = true)
         {
-            return error is RateLimitException
-                || error is ServerException
+            if (error is RateLimitException) return true;
+            return repeatable && (error is ServerException
                 || error is NetworkException
-                || error is TimeoutException;
+                || error is TimeoutException);
         }
 
         /// <summary>
@@ -46,7 +49,8 @@ namespace Tuteliq
             Func<Task<T>> send,
             int maxRetries,
             float retryDelaySeconds,
-            Func<TimeSpan, Task> delay)
+            Func<TimeSpan, Task> delay,
+            bool repeatable = true)
         {
             for (int attempt = 0; ; attempt++)
             {
@@ -54,7 +58,7 @@ namespace Tuteliq
                 {
                     return await send();
                 }
-                catch (Exception e) when (attempt < maxRetries && IsRetryable(e))
+                catch (Exception e) when (attempt < maxRetries && IsRetryable(e, repeatable))
                 {
                     await delay(DelayFor(e, attempt, retryDelaySeconds));
                 }

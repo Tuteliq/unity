@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.5.1] - 2026-11-17
+
+### Fixed
+- Calls that create or change something (webhook create, test and regenerate, consent record, breach log, incident review) are no longer repeated after a server error, network error or timeout, since the API may already have acted on them. A rate limit is still retried. Reads and detections still retry as before.
+- On WebGL, retry waits no longer hang: `Task.Delay` never completes there, so the wait polls the frame clock instead.
 
 ### Added
 - `.meta` files for the package, so installs from a git URL import the scripts. CI checks that every package file has one.

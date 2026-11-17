@@ -63,7 +63,7 @@ namespace Tuteliq
         {
             RequireId(incidentId, "Incident ID");
             ValidateReview(input);
-            var data = await RequestAsync("POST", $"/api/v1/incidents/{Uri.EscapeDataString(incidentId)}/review", BuildReviewBody(input));
+            var data = await ChangeAsync("POST", $"/api/v1/incidents/{Uri.EscapeDataString(incidentId)}/review", BuildReviewBody(input));
             return FillReviewResult(new ReviewIncidentResult(), data);
         }
 
@@ -81,7 +81,7 @@ namespace Tuteliq
 
             var body = BuildReviewBody(input);
             body["incident_ids"] = input.IncidentIds;
-            var data = await RequestAsync("POST", "/api/v1/incidents/batch-review", body);
+            var data = await ChangeAsync("POST", "/api/v1/incidents/batch-review", body);
             return new BatchReviewIncidentsResult
             {
                 Total = GetInt(data, "total"),
