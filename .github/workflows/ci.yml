@@ -32,6 +32,22 @@ jobs:
           done
           echo "All required files present"
 
+      # Unity ignores assets without a .meta file in a package installed from git.
+      - name: Check .meta files
+        run: |
+          missing=0
+          for path in $(git ls-files Runtime Tests package.json README.md CHANGELOG.md LICENSE.md LICENSE llms.txt CITATION.cff | grep -v '\.meta$'); do
+            dir=$(dirname "$path")
+            while [ "$dir" != "." ]; do
+              echo "$dir"; dir=$(dirname "$dir")
+            done
+            echo "$path"
+          done | sort -u | while read -r item; do
+            [ -f "$item.meta" ] || { echo "Missing $item.meta"; echo x >> /tmp/missing; }
+          done
+          [ ! -f /tmp/missing ] || exit 1
+          echo "All .meta files present"
+
       - name: Validate assembly definitions
         run: |
           for asmdef in $(find . -name "*.asmdef"); do

@@ -44,6 +44,8 @@ crashlytics-build.properties
 *.swp
 *.swo
 *~
+!Samples~/
+!Samples~/**
 
 # OS
 .DS_Store

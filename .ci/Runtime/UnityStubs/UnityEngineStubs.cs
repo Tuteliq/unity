@@ -6,6 +6,16 @@ using System.Collections.Generic;
 
 namespace UnityEngine
 {
+    public class MonoBehaviour { }
+
+    public sealed class SerializeFieldAttribute : Attribute { }
+
+    public static class Debug
+    {
+        public static void Log(object message) { }
+        public static void LogError(object message) { }
+    }
+
     public class AsyncOperation
     {
         public bool isDone => true;
