@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Requests and responses use the invariant culture for numbers. Under German, French or Swedish locales, decimals were sent as `0,5` (invalid JSON).
 - Retries honour `Retry-After` and only repeat rate limits, server errors, network errors and timeouts. Other errors (validation, conflicts, unknown statuses) are no longer retried. `maxRetries` now counts retries after the first attempt, so `maxRetries: 0` sends once.
 - Errors read the API error envelope: `Code`, `RequestId` and `HttpStatus` on every `TuteliqException`, and `RetryAfterSeconds` on `RateLimitException` and `ServerException`. A 429 for a used-up allowance is a `QuotaExceededException`.
+- A successful response whose body is empty or not a JSON object (for example a proxy or captive portal page) now throws a `TuteliqException` instead of reading as a clean result. `GetConsentStatusAsync` escapes the consent type in the query.
 - Webhooks: create sends the required `Name`; update uses `PUT` with `is_active`; test and regenerate-secret use the API's routes; `WebhookInfo` reads `IsActive`, `Name`, `FailureCount`, `LastTriggeredAt` and `LastError`.
 - `GetUsageByToolAsync` calls `/api/v1/usage/by-tool`.
 - `Language` lists the 32 supported codes, and an unknown code no longer parses as English.

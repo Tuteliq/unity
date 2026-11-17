@@ -164,3 +164,44 @@ namespace Tuteliq.Tests
         }
     }
 }
+
+namespace Tuteliq.Tests
+{
+    public class MalformedSuccessBodyTests
+    {
+        // A 2xx that is not a JSON object (proxy page, empty body) must not read as a clean result.
+        [TestCase("")]
+        [TestCase("<html>Sign in to the network</html>")]
+        [TestCase("[]")]
+        public void Detection_2xxWithoutAJsonObject_Throws(string body)
+        {
+            var transport = new FakeTransport().Respond(200, body);
+            var client = TestClient.Create(transport);
+
+            var error = Assert.Catch<TuteliqException>(() => TestClient.Run(client.DetectUnsafeAsync("text")));
+
+            Assert.AreEqual(200, error.HttpStatus);
+            Assert.AreEqual(1, transport.Requests.Count, "an answered request is not repeated");
+        }
+
+        [Test]
+        public void Delete_204WithNoBody_Succeeds()
+        {
+            var transport = new FakeTransport().Respond(204, "");
+            var client = TestClient.Create(transport);
+
+            Assert.DoesNotThrow(() => TestClient.Run(client.DeleteWebhookAsync("wh_1")));
+        }
+
+        [Test]
+        public void ConsentStatus_EscapesTheTypeInTheQuery()
+        {
+            var transport = new FakeTransport().Respond(200, "{\"consents\":[]}");
+            var client = TestClient.Create(transport);
+
+            TestClient.Run(client.GetConsentStatusAsync("a&b=c"));
+
+            StringAssert.EndsWith("?type=a%26b%3Dc", transport.Last.Url);
+        }
+    }
+}

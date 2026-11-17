@@ -356,7 +356,7 @@ namespace Tuteliq
         /// </summary>
         public async Task<ConsentStatusResult> GetConsentStatusAsync(string consentType = null)
         {
-            var query = consentType != null ? $"?type={consentType}" : "";
+            var query = consentType != null ? $"?type={Uri.EscapeDataString(consentType)}" : "";
             var response = await RequestAsync("GET", $"/api/v1/account/consent{query}");
             var consents = new List<ConsentRecord>();
             if (response.ContainsKey("consents") && response["consents"] is List<object> list)
@@ -995,7 +995,34 @@ namespace Tuteliq
             if (response.StatusCode < 200 || response.StatusCode >= 300)
                 throw ApiErrors.FromResponse(response.StatusCode, response.Body, response.Header("retry-after"), LastRequestId);
 
-            return ParseJson(response.Body);
+            return ParseSuccessBody(request, response);
+        }
+
+        // A success that is not a JSON object (an empty body, a proxy or captive portal page)
+        // would otherwise parse to empty defaults and read as a clean, safe result.
+        private static Dictionary<string, object> ParseSuccessBody(TransportRequest request, TransportResponse response)
+        {
+            if (string.IsNullOrWhiteSpace(response.Body))
+            {
+                if (response.StatusCode == 204 || request.Method == "DELETE")
+                    return new Dictionary<string, object>();
+                throw MalformedResponse(response, "empty body");
+            }
+
+            object parsed;
+            try { parsed = MiniJson.Deserialize(response.Body); }
+            catch (Exception) { throw MalformedResponse(response, "body is not valid JSON"); }
+
+            if (parsed is Dictionary<string, object> root) return root;
+            throw MalformedResponse(response, "body is not a JSON object");
+        }
+
+        private static TuteliqException MalformedResponse(TransportResponse response, string reason)
+        {
+            return new TuteliqException($"Unexpected response from the API: {reason}")
+            {
+                HttpStatus = response.StatusCode
+            };
         }
 
         private void RecordResponseHeaders(TransportResponse response)

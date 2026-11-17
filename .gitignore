@@ -50,6 +50,7 @@ crashlytics-build.properties
 Thumbs.db
 
 # CI build projects (.NET SDK build of the Runtime scripts)
+# Unity skips folders that start with a dot, so .ci is never imported; this keeps the build projects tracked.
 !.ci/**/*.csproj
 .ci/**/bin/
 .ci/**/obj/
