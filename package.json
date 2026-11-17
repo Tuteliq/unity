@@ -1,6 +1,6 @@
 {
   "name": "dev.tuteliq.sdk",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "displayName": "Tuteliq SDK",
   "description": "Official Unity SDK for Tuteliq - child safety API for content moderation, bullying and grooming detection, nickname screening, age verification and document analysis.",
   "unity": "2021.3",
