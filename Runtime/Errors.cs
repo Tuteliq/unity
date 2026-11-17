@@ -9,6 +9,21 @@ namespace Tuteliq
     {
         public object Details { get; }
 
+        /// <summary>
+        /// Error code from the API error envelope (for example "RATE_2001"), when the API sent one.
+        /// </summary>
+        public string Code { get; internal set; }
+
+        /// <summary>
+        /// Request ID of the failed call, when known. Quote it when contacting support.
+        /// </summary>
+        public string RequestId { get; internal set; }
+
+        /// <summary>
+        /// HTTP status of the failed call, when the API answered.
+        /// </summary>
+        public int? HttpStatus { get; internal set; }
+
         public TuteliqException(string message, object details = null) : base(message)
         {
             Details = details;
@@ -28,7 +43,15 @@ namespace Tuteliq
     /// </summary>
     public class RateLimitException : TuteliqException
     {
-        public RateLimitException(string message, object details = null) : base(message, details) { }
+        /// <summary>
+        /// Seconds the API asked the client to wait before retrying (the Retry-After header), when sent.
+        /// </summary>
+        public int? RetryAfterSeconds { get; }
+
+        public RateLimitException(string message, object details = null, int? retryAfterSeconds = null) : base(message, details)
+        {
+            RetryAfterSeconds = retryAfterSeconds;
+        }
     }
 
     /// <summary>
@@ -54,9 +77,15 @@ namespace Tuteliq
     {
         public int StatusCode { get; }
 
-        public ServerException(string message, int statusCode, object details = null) : base(message, details)
+        /// <summary>
+        /// Seconds the API asked the client to wait before retrying (the Retry-After header), when sent.
+        /// </summary>
+        public int? RetryAfterSeconds { get; }
+
+        public ServerException(string message, int statusCode, object details = null, int? retryAfterSeconds = null) : base(message, details)
         {
             StatusCode = statusCode;
+            RetryAfterSeconds = retryAfterSeconds;
         }
     }
 
