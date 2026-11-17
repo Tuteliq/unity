@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.5.0] - Unreleased
+## [2.5.0] - 2026-11-17
 
 ### Fixed
 - `AnalyzeAsync` now returns the most severe `recommended_action` across its checks. It previously matched a value the API never returns, so `flag_for_review` and `block` came back as `none`.
