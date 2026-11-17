@@ -48,3 +48,8 @@ crashlytics-build.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# CI build projects (.NET SDK build of the Runtime scripts)
+!.ci/**/*.csproj
+.ci/**/bin/
+.ci/**/obj/

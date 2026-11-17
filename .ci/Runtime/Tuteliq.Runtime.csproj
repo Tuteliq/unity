@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Builds the Unity Runtime scripts with the .NET SDK, against compile-only
+       UnityEngine stubs. LangVersion matches what Unity 2021.3 compiles. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>Tuteliq.Runtime</AssemblyName>
+    <RootNamespace>Tuteliq</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Runtime/**/*.cs" />
+    <Compile Include="UnityStubs/**/*.cs" />
+  </ItemGroup>
+</Project>
