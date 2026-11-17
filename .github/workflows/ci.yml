@@ -16,15 +16,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '8.0.x'
 
       - name: Validate package.json
-        run: |
-          if [ ! -f "package.json" ]; then
-            echo "package.json not found!"
-            exit 1
-          fi
-          echo "package.json exists"
+        run: python3 -c "import json; json.load(open('package.json'))"
 
       - name: Check required files
         run: |
@@ -43,3 +38,12 @@ jobs:
             echo "Validating $asmdef"
             python3 -c "import json; json.load(open('$asmdef'))"
           done
+
+      # Compiles every Runtime script with C# 9 (what Unity 2021.3 accepts)
+      # against compile-only UnityEngine stubs in .ci/Runtime/UnityStubs.
+      - name: Build Runtime scripts
+        run: dotnet build .ci/Runtime/Tuteliq.Runtime.csproj --configuration Release
+
+      # Runs Tests/Runtime with NUnit. Requests go to a fake transport; nothing is sent.
+      - name: Run tests
+        run: dotnet test .ci/Tests/Tuteliq.Tests.csproj --configuration Release --logger "console;verbosity=normal"

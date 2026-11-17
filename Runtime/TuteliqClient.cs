@@ -1,27 +1,29 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Text;
+using System.Globalization;
 using System.Threading.Tasks;
-using UnityEngine;
-using UnityEngine.Networking;
 
 namespace Tuteliq
 {
     /// <summary>
     /// Tuteliq API client for child safety analysis.
     /// </summary>
+    /// <remarks>
+    /// The API key grants full access to your account. Use this client from a
+    /// game server or backend you control, or point <c>baseUrl</c> at your own
+    /// proxy that adds the key. Do not ship the key inside a game build.
+    /// </remarks>
     /// <example>
     /// <code>
-    /// var client = new TuteliqClient("your-api-key");
+    /// var client = new TuteliqClient(apiKey);
     /// var result = await client.DetectBullyingAsync("Some text to analyze");
-    /// if (result.IsBullying)
+    /// if (ModerationActions.NeedsReview(result.Action))
     /// {
-    ///     Debug.Log($"Severity: {result.Severity}");
+    ///     Debug.Log($"Needs review: {result.Rationale}");
     /// }
     /// </code>
     /// </example>
-    public class TuteliqClient
+    public partial class TuteliqClient
     {
         private const string DefaultBaseUrl = "https://api.tuteliq.ai";
         private const string SdkIdentifier = "Unity SDK";
@@ -31,6 +33,8 @@ namespace Tuteliq
         private readonly float _timeout;
         private readonly int _maxRetries;
         private readonly float _retryDelay;
+        private readonly ITransport _transport;
+        private readonly Func<TimeSpan, Task> _delay;
 
         /// <summary>
         /// Current usage statistics (updated after each request).
@@ -45,13 +49,25 @@ namespace Tuteliq
         /// <summary>
         /// Creates a new Tuteliq client.
         /// </summary>
-        /// <param name="apiKey">Your Tuteliq API key.</param>
+        /// <param name="apiKey">Your Tuteliq API key, or a token your own proxy accepts.</param>
         /// <param name="timeout">Request timeout in seconds (default: 30).</param>
-        /// <param name="maxRetries">Number of retry attempts (default: 3).</param>
-        /// <param name="retryDelay">Initial retry delay in seconds (default: 1).</param>
-        /// <param name="baseUrl">API base URL.</param>
+        /// <param name="maxRetries">Retries after the first attempt for rate limits, server errors, network errors and timeouts (default: 3).</param>
+        /// <param name="retryDelay">Initial retry delay in seconds, doubled on each retry (default: 1). A Retry-After from the API takes precedence.</param>
+        /// <param name="baseUrl">API base URL, or the URL of your proxy.</param>
         public TuteliqClient(
             string apiKey,
+            float timeout = 30f,
+            int maxRetries = 3,
+            float retryDelay = 1f,
+            string baseUrl = DefaultBaseUrl)
+            : this(apiKey, new UnityWebRequestTransport(), null, timeout, maxRetries, retryDelay, baseUrl)
+        {
+        }
+
+        internal TuteliqClient(
+            string apiKey,
+            ITransport transport,
+            Func<TimeSpan, Task> delay,
             float timeout = 30f,
             int maxRetries = 3,
             float retryDelay = 1f,
@@ -64,9 +80,11 @@ namespace Tuteliq
 
             _apiKey = apiKey;
             _timeout = timeout;
-            _maxRetries = maxRetries;
+            _maxRetries = Math.Max(0, maxRetries);
             _retryDelay = retryDelay;
             _baseUrl = baseUrl;
+            _transport = transport;
+            _delay = delay ?? (wait => Task.Delay(wait));
         }
 
         // =====================================================================
@@ -101,20 +119,15 @@ namespace Tuteliq
         /// </summary>
         public async Task<GroomingResult> DetectGroomingAsync(DetectGroomingInput input)
         {
-            var messages = new List<Dictionary<string, string>>();
+            var messages = new List<object>();
             foreach (var msg in input.Messages)
-            {
-                messages.Add(new Dictionary<string, string>
-                {
-                    { "sender_role", msg.Role.ToApiString() },
-                    { "text", msg.Content }
-                });
-            }
+                messages.Add(GroomingMessageToDict(msg));
 
             var body = new Dictionary<string, object> { { "messages", messages } };
 
             var context = new Dictionary<string, object>();
             if (input.ChildAge.HasValue) context["child_age"] = input.ChildAge.Value;
+            if (input.ParticipantAge.HasValue) context["participant_age"] = input.ParticipantAge.Value;
             if (input.Context != null)
             {
                 foreach (var kvp in ContextToDict(input.Context))
@@ -130,6 +143,17 @@ namespace Tuteliq
 
             var response = await RequestAsync("/api/v1/safety/grooming", body);
             return ParseGroomingResult(response);
+        }
+
+        private static Dictionary<string, object> GroomingMessageToDict(GroomingMessage msg)
+        {
+            var dict = new Dictionary<string, object>
+            {
+                { "sender_role", msg.Role.ToApiString() },
+                { "text", msg.Content }
+            };
+            if (msg.SenderAge.HasValue) dict["sender_age"] = msg.SenderAge.Value;
+            return dict;
         }
 
         /// <summary>
@@ -157,6 +181,7 @@ namespace Tuteliq
 
         /// <summary>
         /// Quick analysis - runs bullying and unsafe detection.
+        /// <see cref="AnalyzeResult.RecommendedAction"/> is the most severe action across the checks that ran.
         /// </summary>
         public async Task<AnalyzeResult> AnalyzeAsync(
             string content,
@@ -170,64 +195,18 @@ namespace Tuteliq
 
             BullyingResult bullyingResult = null;
             UnsafeResult unsafeResult = null;
-            float maxRiskScore = 0f;
 
             if (checks.Contains("bullying"))
-            {
                 bullyingResult = await DetectBullyingAsync(content, context, externalId, customerId, metadata);
-                maxRiskScore = Math.Max(maxRiskScore, bullyingResult.RiskScore);
-            }
 
             if (checks.Contains("unsafe"))
-            {
                 unsafeResult = await DetectUnsafeAsync(content, context, externalId, customerId, metadata);
-                maxRiskScore = Math.Max(maxRiskScore, unsafeResult.RiskScore);
-            }
 
-            // Determine risk level
-            RiskLevel riskLevel;
-            if (maxRiskScore >= 0.9f) riskLevel = RiskLevel.Critical;
-            else if (maxRiskScore >= 0.7f) riskLevel = RiskLevel.High;
-            else if (maxRiskScore >= 0.5f) riskLevel = RiskLevel.Medium;
-            else if (maxRiskScore >= 0.3f) riskLevel = RiskLevel.Low;
-            else riskLevel = RiskLevel.Safe;
-
-            // Build summary
-            var findings = new List<string>();
-            if (bullyingResult?.IsBullying == true)
-                findings.Add($"Bullying detected ({bullyingResult.Severity.ToApiString()})");
-            if (unsafeResult?.Unsafe == true)
-                findings.Add($"Unsafe content: {string.Join(", ", unsafeResult.Categories)}");
-            var summary = findings.Count == 0 ? "No safety concerns detected." : string.Join(". ", findings);
-
-            // Determine action
-            var actions = new List<string>();
-            if (bullyingResult != null) actions.Add(bullyingResult.RecommendedAction);
-            if (unsafeResult != null) actions.Add(unsafeResult.RecommendedAction);
-
-            string recommendedAction;
-            if (actions.Contains("immediate_intervention")) recommendedAction = "immediate_intervention";
-            else if (actions.Contains("flag_for_moderator")) recommendedAction = "flag_for_moderator";
-            else if (actions.Contains("monitor")) recommendedAction = "monitor";
-            else recommendedAction = "none";
-
-            int? totalCredits = null;
-            if (bullyingResult?.CreditsUsed != null || unsafeResult?.CreditsUsed != null)
-                totalCredits = (bullyingResult?.CreditsUsed ?? 0) + (unsafeResult?.CreditsUsed ?? 0);
-
-            return new AnalyzeResult
-            {
-                RiskLevel = riskLevel,
-                RiskScore = maxRiskScore,
-                Summary = summary,
-                Bullying = bullyingResult,
-                Unsafe = unsafeResult,
-                RecommendedAction = recommendedAction,
-                CreditsUsed = totalCredits,
-                ExternalId = externalId,
-                CustomerId = customerId,
-                Metadata = metadata
-            };
+            var result = AnalyzeResultBuilder.Build(bullyingResult, unsafeResult);
+            result.ExternalId = externalId;
+            result.CustomerId = customerId;
+            result.Metadata = metadata;
+            return result;
         }
 
         // =====================================================================
@@ -331,7 +310,7 @@ namespace Tuteliq
         // =====================================================================
 
         /// <summary>
-        /// Delete all account data (GDPR Article 17 — Right to Erasure).
+        /// Delete all account data (GDPR Article 17: Right to Erasure).
         /// </summary>
         public async Task<AccountDeletionResult> DeleteAccountDataAsync()
         {
@@ -344,7 +323,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Export all account data as JSON (GDPR Article 20 — Right to Data Portability).
+        /// Export all account data as JSON (GDPR Article 20: Right to Data Portability).
         /// </summary>
         public async Task<AccountExportResult> ExportAccountDataAsync()
         {
@@ -377,7 +356,7 @@ namespace Tuteliq
         /// </summary>
         public async Task<ConsentStatusResult> GetConsentStatusAsync(string consentType = null)
         {
-            var query = consentType != null ? $"?type={consentType}" : "";
+            var query = consentType != null ? $"?type={Uri.EscapeDataString(consentType)}" : "";
             var response = await RequestAsync("GET", $"/api/v1/account/consent{query}");
             var consents = new List<ConsentRecord>();
             if (response.ContainsKey("consents") && response["consents"] is List<object> list)
@@ -401,7 +380,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Rectify user data (GDPR Article 16 — Right to Rectification).
+        /// Rectify user data (GDPR Article 16: Right to Rectification).
         /// </summary>
         public async Task<RectifyDataResult> RectifyDataAsync(RectifyDataInput input)
         {
@@ -426,7 +405,7 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Get audit logs (GDPR Article 15 — Right of Access).
+        /// Get audit logs (GDPR Article 15: Right of Access).
         /// </summary>
         public async Task<AuditLogsResult> GetAuditLogsAsync(string action = null, int? limit = null)
         {
@@ -597,19 +576,19 @@ namespace Tuteliq
             string platform = null,
             int? childAge = null)
         {
-            var formSections = new List<IMultipartFormSection>();
-            formSections.Add(new MultipartFormFileSection("file", file, filename, "application/octet-stream"));
-            formSections.Add(new MultipartFormDataSection("analysis_type", analysisType));
-            formSections.Add(new MultipartFormDataSection("platform", ResolvePlatform(platform)));
-            if (fileId != null) formSections.Add(new MultipartFormDataSection("file_id", fileId));
-            if (externalId != null) formSections.Add(new MultipartFormDataSection("external_id", externalId));
-            if (customerId != null) formSections.Add(new MultipartFormDataSection("customer_id", customerId));
-            if (metadata != null) formSections.Add(new MultipartFormDataSection("metadata", MiniJson.Serialize(metadata)));
-            if (ageGroup != null) formSections.Add(new MultipartFormDataSection("age_group", ageGroup));
-            if (language != null) formSections.Add(new MultipartFormDataSection("language", language));
-            if (childAge.HasValue) formSections.Add(new MultipartFormDataSection("child_age", childAge.Value.ToString()));
+            var form = new MultipartForm()
+                .AddFile("file", file, filename)
+                .Add("analysis_type", analysisType)
+                .Add("platform", ResolvePlatform(platform))
+                .AddIfSet("file_id", fileId)
+                .AddIfSet("external_id", externalId)
+                .AddIfSet("customer_id", customerId)
+                .AddIfSet("metadata", metadata != null ? MiniJson.Serialize(metadata) : null)
+                .AddIfSet("age_group", ageGroup)
+                .AddIfSet("language", language)
+                .AddIfSet("child_age", childAge.HasValue ? FormatInt(childAge.Value) : null);
 
-            var data = await MultipartRequestAsync("/api/v1/safety/voice", formSections);
+            var data = await MultipartRequestAsync("/api/v1/safety/voice", form);
             return ParseVoiceAnalysisResult(data);
         }
 
@@ -633,19 +612,19 @@ namespace Tuteliq
             string platform = null,
             int? childAge = null)
         {
-            var formSections = new List<IMultipartFormSection>();
-            formSections.Add(new MultipartFormFileSection("file", file, filename, "application/octet-stream"));
-            formSections.Add(new MultipartFormDataSection("analysis_type", analysisType));
-            formSections.Add(new MultipartFormDataSection("platform", ResolvePlatform(platform)));
-            if (fileId != null) formSections.Add(new MultipartFormDataSection("file_id", fileId));
-            if (externalId != null) formSections.Add(new MultipartFormDataSection("external_id", externalId));
-            if (customerId != null) formSections.Add(new MultipartFormDataSection("customer_id", customerId));
-            if (metadata != null) formSections.Add(new MultipartFormDataSection("metadata", MiniJson.Serialize(metadata)));
-            if (ageGroup != null) formSections.Add(new MultipartFormDataSection("age_group", ageGroup));
-            if (language != null) formSections.Add(new MultipartFormDataSection("language", language));
-            if (childAge.HasValue) formSections.Add(new MultipartFormDataSection("child_age", childAge.Value.ToString()));
+            var form = new MultipartForm()
+                .AddFile("file", file, filename)
+                .Add("analysis_type", analysisType)
+                .Add("platform", ResolvePlatform(platform))
+                .AddIfSet("file_id", fileId)
+                .AddIfSet("external_id", externalId)
+                .AddIfSet("customer_id", customerId)
+                .AddIfSet("metadata", metadata != null ? MiniJson.Serialize(metadata) : null)
+                .AddIfSet("age_group", ageGroup)
+                .AddIfSet("language", language)
+                .AddIfSet("child_age", childAge.HasValue ? FormatInt(childAge.Value) : null);
 
-            var data = await MultipartRequestAsync("/api/v1/safety/image", formSections);
+            var data = await MultipartRequestAsync("/api/v1/safety/image", form);
             return ParseImageAnalysisResult(data);
         }
 
@@ -783,19 +762,19 @@ namespace Tuteliq
             string platform = null,
             int? childAge = null)
         {
-            var formSections = new List<IMultipartFormSection>();
-            formSections.Add(new MultipartFormFileSection("file", file, filename, "application/octet-stream"));
-            formSections.Add(new MultipartFormDataSection("analysis_type", analysisType));
-            formSections.Add(new MultipartFormDataSection("platform", ResolvePlatform(platform)));
-            if (fileId != null) formSections.Add(new MultipartFormDataSection("file_id", fileId));
-            if (externalId != null) formSections.Add(new MultipartFormDataSection("external_id", externalId));
-            if (customerId != null) formSections.Add(new MultipartFormDataSection("customer_id", customerId));
-            if (metadata != null) formSections.Add(new MultipartFormDataSection("metadata", MiniJson.Serialize(metadata)));
-            if (ageGroup != null) formSections.Add(new MultipartFormDataSection("age_group", ageGroup));
-            if (language != null) formSections.Add(new MultipartFormDataSection("language", language));
-            if (childAge.HasValue) formSections.Add(new MultipartFormDataSection("child_age", childAge.Value.ToString()));
+            var form = new MultipartForm()
+                .AddFile("file", file, filename)
+                .Add("analysis_type", analysisType)
+                .Add("platform", ResolvePlatform(platform))
+                .AddIfSet("file_id", fileId)
+                .AddIfSet("external_id", externalId)
+                .AddIfSet("customer_id", customerId)
+                .AddIfSet("metadata", metadata != null ? MiniJson.Serialize(metadata) : null)
+                .AddIfSet("age_group", ageGroup)
+                .AddIfSet("language", language)
+                .AddIfSet("child_age", childAge.HasValue ? FormatInt(childAge.Value) : null);
 
-            var data = await MultipartRequestAsync("/api/v1/safety/video", formSections);
+            var data = await MultipartRequestAsync("/api/v1/safety/video", form);
             return ParseVideoAnalysisResult(data);
         }
 
@@ -813,33 +792,41 @@ namespace Tuteliq
         }
 
         /// <summary>
-        /// Create a new webhook.
+        /// Create a new webhook. The signing secret is returned only here: store it securely.
         /// </summary>
         public async Task<CreateWebhookResult> CreateWebhookAsync(CreateWebhookInput input)
         {
+            if (string.IsNullOrEmpty(input.Name))
+                throw new ValidationException("Webhook name is required");
+
             var body = new Dictionary<string, object>
             {
+                { "name", input.Name },
                 { "url", input.Url },
-                { "events", input.Events },
-                { "active", input.Active },
-                { "context", new Dictionary<string, object> { { "platform", ResolvePlatform() } } }
+                { "events", input.Events }
             };
+            if (input.Headers != null) body["headers"] = input.Headers;
             var response = await RequestAsync("POST", "/api/v1/webhooks", body);
-            return ParseCreateWebhookResult(response);
+            return new CreateWebhookResult
+            {
+                Webhook = ParseWebhookInfo(response),
+                Secret = GetString(response, "secret")
+            };
         }
 
         /// <summary>
-        /// Update an existing webhook.
+        /// Update an existing webhook. Only the fields that are set are sent.
         /// </summary>
         public async Task<UpdateWebhookResult> UpdateWebhookAsync(string webhookId, UpdateWebhookInput input)
         {
             var body = new Dictionary<string, object>();
+            if (input.Name != null) body["name"] = input.Name;
             if (input.Url != null) body["url"] = input.Url;
             if (input.Events != null) body["events"] = input.Events;
-            if (input.Active.HasValue) body["active"] = input.Active.Value;
-            body["context"] = new Dictionary<string, object> { { "platform", ResolvePlatform() } };
-            var response = await RequestAsync("PATCH", $"/api/v1/webhooks/{webhookId}", body);
-            return ParseUpdateWebhookResult(response);
+            if (input.IsActive.HasValue) body["is_active"] = input.IsActive.Value;
+            if (input.Headers != null) body["headers"] = input.Headers;
+            var response = await RequestAsync("PUT", $"/api/v1/webhooks/{Uri.EscapeDataString(webhookId)}", body);
+            return new UpdateWebhookResult { Webhook = ParseWebhookInfo(response) };
         }
 
         /// <summary>
@@ -847,9 +834,10 @@ namespace Tuteliq
         /// </summary>
         public async Task<DeleteWebhookResult> DeleteWebhookAsync(string webhookId)
         {
-            var response = await RequestAsync("DELETE", $"/api/v1/webhooks/{webhookId}");
+            var response = await RequestAsync("DELETE", $"/api/v1/webhooks/{Uri.EscapeDataString(webhookId)}");
             return new DeleteWebhookResult
             {
+                Success = GetBool(response, "success"),
                 Message = GetString(response, "message")
             };
         }
@@ -859,33 +847,24 @@ namespace Tuteliq
         /// </summary>
         public async Task<TestWebhookResult> TestWebhookAsync(string webhookId)
         {
-            var body = new Dictionary<string, object>
-            {
-                { "context", new Dictionary<string, object> { { "platform", ResolvePlatform() } } }
-            };
-            var response = await RequestAsync("POST", $"/api/v1/webhooks/{webhookId}/test", body);
+            var body = new Dictionary<string, object> { { "webhook_id", webhookId } };
+            var response = await RequestAsync("POST", "/api/v1/webhooks/test", body);
             return new TestWebhookResult
             {
-                Message = GetString(response, "message"),
-                StatusCode = response.ContainsKey("status_code") ? (int?)Convert.ToInt32(response["status_code"]) : null
+                Success = GetBool(response, "success"),
+                StatusCode = GetNullableInt(response, "status_code"),
+                LatencyMs = GetNullableDouble(response, "latency_ms"),
+                Error = GetString(response, "error")
             };
         }
 
         /// <summary>
-        /// Regenerate the secret for a webhook.
+        /// Regenerate the secret for a webhook. The old secret stops working at once.
         /// </summary>
         public async Task<RegenerateSecretResult> RegenerateWebhookSecretAsync(string webhookId)
         {
-            var body = new Dictionary<string, object>
-            {
-                { "context", new Dictionary<string, object> { { "platform", ResolvePlatform() } } }
-            };
-            var response = await RequestAsync("POST", $"/api/v1/webhooks/{webhookId}/secret", body);
-            return new RegenerateSecretResult
-            {
-                Message = GetString(response, "message"),
-                Secret = GetString(response, "secret")
-            };
+            var response = await RequestAsync("POST", $"/api/v1/webhooks/{Uri.EscapeDataString(webhookId)}/regenerate-secret");
+            return new RegenerateSecretResult { Secret = GetString(response, "secret") };
         }
 
         // =====================================================================
@@ -930,7 +909,7 @@ namespace Tuteliq
         public async Task<UsageByToolResult> GetUsageByToolAsync(string date = null)
         {
             var query = date != null ? $"?date={date}" : "";
-            var response = await RequestAsync("GET", $"/api/v1/usage/tools{query}");
+            var response = await RequestAsync("GET", $"/api/v1/usage/by-tool{query}");
             return ParseUsageByToolResult(response);
         }
 
@@ -947,194 +926,115 @@ namespace Tuteliq
         // Private Methods
         // =====================================================================
 
-        private async Task<Dictionary<string, object>> RequestAsync(
+        private Task<Dictionary<string, object>> RequestAsync(
             string path,
             Dictionary<string, object> body)
         {
-            return await RequestAsync("POST", path, body);
+            return RequestAsync("POST", path, body);
         }
 
-        private async Task<Dictionary<string, object>> RequestAsync(
+        private Task<Dictionary<string, object>> RequestAsync(
             string method,
             string path,
             Dictionary<string, object> body = null)
         {
-            Exception lastError = null;
-
-            for (int attempt = 0; attempt < _maxRetries; attempt++)
-            {
-                try
-                {
-                    return await PerformRequestAsync(method, path, body);
-                }
-                catch (AuthenticationException) { throw; }
-                catch (ValidationException) { throw; }
-                catch (NotFoundException) { throw; }
-                catch (QuotaExceededException) { throw; }
-                catch (TierAccessException) { throw; }
-                catch (Exception e)
-                {
-                    lastError = e;
-                    if (attempt < _maxRetries - 1)
-                    {
-                        await Task.Delay((int)(_retryDelay * 1000 * (1 << attempt)));
-                    }
-                }
-            }
-
-            throw lastError ?? new TuteliqException("Request failed after retries");
+            return RetryPolicy.ExecuteAsync(
+                () => SendJsonOnceAsync(method, path, body),
+                _maxRetries, _retryDelay, _delay);
         }
 
-        private async Task<Dictionary<string, object>> PerformRequestAsync(
+        /// <summary>
+        /// Sends without retrying, for calls that must not be repeated (each one creates something new).
+        /// </summary>
+        private Task<Dictionary<string, object>> SendJsonOnceAsync(
             string method,
             string path,
             Dictionary<string, object> body)
         {
-            var url = _baseUrl + path;
-
-            using var request = new UnityWebRequest(url, method);
-            if (body != null)
-            {
-                var json = SerializeToJson(body);
-                request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
-            }
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.timeout = (int)_timeout;
-
-            var operation = request.SendWebRequest();
-            while (!operation.isDone)
-                await Task.Yield();
-
-            // Extract headers
-            LastRequestId = request.GetResponseHeader("x-request-id");
-
-            // Monthly usage headers
-            var limitStr = request.GetResponseHeader("x-monthly-limit");
-            var usedStr = request.GetResponseHeader("x-monthly-used");
-            var remainingStr = request.GetResponseHeader("x-monthly-remaining");
-
-            if (int.TryParse(limitStr, out int limit) &&
-                int.TryParse(usedStr, out int used) &&
-                int.TryParse(remainingStr, out int remaining))
-            {
-                Usage = new Usage { Limit = limit, Used = used, Remaining = remaining };
-            }
-
-            if (request.result == UnityWebRequest.Result.ConnectionError)
-                throw new NetworkException(request.error);
-
-            if (request.result == UnityWebRequest.Result.ProtocolError)
-                HandleErrorResponse(request);
-
-            var responseJson = request.downloadHandler.text;
-            return ParseJson(responseJson);
+            var request = NewRequest(method, path);
+            if (body != null) request.JsonBody = MiniJson.Serialize(body);
+            return SendAsync(request);
         }
 
-        private void HandleErrorResponse(UnityWebRequest request)
+        private Task<Dictionary<string, object>> MultipartRequestAsync(string path, MultipartForm form)
         {
-            string message = "Request failed";
-            object details = null;
-
-            try
-            {
-                var data = ParseJson(request.downloadHandler.text);
-                if (data.TryGetValue("error", out var errorObj) && errorObj is Dictionary<string, object> error)
+            return RetryPolicy.ExecuteAsync(
+                () =>
                 {
-                    if (error.TryGetValue("message", out var msg))
-                        message = msg.ToString();
-                    error.TryGetValue("details", out details);
-                }
-            }
-            catch { }
+                    var request = NewRequest("POST", path);
+                    request.Form = form;
+                    return SendAsync(request);
+                },
+                _maxRetries, _retryDelay, _delay);
+        }
 
-            var status = (int)request.responseCode;
-
-            throw status switch
+        private TransportRequest NewRequest(string method, string path)
+        {
+            var request = new TransportRequest
             {
-                400 => new ValidationException(message, details),
-                401 => new AuthenticationException(message, details),
-                402 => new QuotaExceededException(message, details),
-                403 => new TierAccessException(message, details),
-                404 => new NotFoundException(message, details),
-                429 => new RateLimitException(message, details),
-                >= 500 => new ServerException(message, status, details),
-                _ => new TuteliqException(message, details)
+                Method = method,
+                Url = _baseUrl + path,
+                TimeoutSeconds = (int)_timeout
+            };
+            request.Headers["Authorization"] = $"Bearer {_apiKey}";
+            return request;
+        }
+
+        private async Task<Dictionary<string, object>> SendAsync(TransportRequest request)
+        {
+            var response = await _transport.SendAsync(request);
+            RecordResponseHeaders(response);
+
+            if (response.TransportError != null)
+            {
+                if (response.TimedOut)
+                    throw new TimeoutException($"Request timed out after {request.TimeoutSeconds}s");
+                throw new NetworkException(response.TransportError);
+            }
+
+            if (response.StatusCode < 200 || response.StatusCode >= 300)
+                throw ApiErrors.FromResponse(response.StatusCode, response.Body, response.Header("retry-after"), LastRequestId);
+
+            return ParseSuccessBody(request, response);
+        }
+
+        // A success that is not a JSON object (an empty body, a proxy or captive portal page)
+        // would otherwise parse to empty defaults and read as a clean, safe result.
+        private static Dictionary<string, object> ParseSuccessBody(TransportRequest request, TransportResponse response)
+        {
+            if (string.IsNullOrWhiteSpace(response.Body))
+            {
+                if (response.StatusCode == 204 || request.Method == "DELETE")
+                    return new Dictionary<string, object>();
+                throw MalformedResponse(response, "empty body");
+            }
+
+            object parsed;
+            try { parsed = MiniJson.Deserialize(response.Body); }
+            catch (Exception) { throw MalformedResponse(response, "body is not valid JSON"); }
+
+            if (parsed is Dictionary<string, object> root) return root;
+            throw MalformedResponse(response, "body is not a JSON object");
+        }
+
+        private static TuteliqException MalformedResponse(TransportResponse response, string reason)
+        {
+            return new TuteliqException($"Unexpected response from the API: {reason}")
+            {
+                HttpStatus = response.StatusCode
             };
         }
 
-        private async Task<Dictionary<string, object>> MultipartRequestAsync(
-            string path,
-            List<IMultipartFormSection> formSections)
+        private void RecordResponseHeaders(TransportResponse response)
         {
-            Exception lastError = null;
+            LastRequestId = response.Header("x-request-id");
 
-            for (int attempt = 0; attempt < _maxRetries; attempt++)
-            {
-                try
-                {
-                    return await PerformMultipartRequestAsync(path, formSections);
-                }
-                catch (AuthenticationException) { throw; }
-                catch (ValidationException) { throw; }
-                catch (NotFoundException) { throw; }
-                catch (QuotaExceededException) { throw; }
-                catch (TierAccessException) { throw; }
-                catch (Exception e)
-                {
-                    lastError = e;
-                    if (attempt < _maxRetries - 1)
-                    {
-                        await Task.Delay((int)(_retryDelay * 1000 * (1 << attempt)));
-                    }
-                }
-            }
-
-            throw lastError ?? new TuteliqException("Request failed after retries");
-        }
-
-        private async Task<Dictionary<string, object>> PerformMultipartRequestAsync(
-            string path,
-            List<IMultipartFormSection> formSections)
-        {
-            var url = _baseUrl + path;
-
-            var boundary = UnityWebRequest.GenerateBoundary();
-            var formData = UnityWebRequest.SerializeFormSections(formSections, boundary);
-
-            using var request = new UnityWebRequest(url, "POST");
-            request.uploadHandler = new UploadHandlerRaw(formData);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-            request.SetRequestHeader("Content-Type", $"multipart/form-data; boundary={Encoding.UTF8.GetString(boundary)}");
-            request.timeout = (int)_timeout;
-
-            var operation = request.SendWebRequest();
-            while (!operation.isDone)
-                await Task.Yield();
-
-            LastRequestId = request.GetResponseHeader("x-request-id");
-
-            var limitStr = request.GetResponseHeader("x-monthly-limit");
-            var usedStr = request.GetResponseHeader("x-monthly-used");
-            var remainingStr = request.GetResponseHeader("x-monthly-remaining");
-
-            if (int.TryParse(limitStr, out int limit) &&
-                int.TryParse(usedStr, out int used) &&
-                int.TryParse(remainingStr, out int remaining))
+            if (int.TryParse(response.Header("x-monthly-limit"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int limit) &&
+                int.TryParse(response.Header("x-monthly-used"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int used) &&
+                int.TryParse(response.Header("x-monthly-remaining"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int remaining))
             {
                 Usage = new Usage { Limit = limit, Used = used, Remaining = remaining };
             }
-
-            if (request.result == UnityWebRequest.Result.ConnectionError)
-                throw new NetworkException(request.error);
-
-            if (request.result == UnityWebRequest.Result.ProtocolError)
-                HandleErrorResponse(request);
-
-            var responseJson = request.downloadHandler.text;
-            return ParseJson(responseJson);
         }
 
         private static string ResolvePlatform(string platform = null)
@@ -1154,89 +1054,14 @@ namespace Tuteliq
             return dict;
         }
 
-        // Simple JSON serialization (Unity's JsonUtility doesn't handle dictionaries well)
-        private string SerializeToJson(Dictionary<string, object> dict)
+        private static string FormatInt(int value)
         {
-            var sb = new StringBuilder();
-            sb.Append("{");
-            var first = true;
-            foreach (var kvp in dict)
-            {
-                if (!first) sb.Append(",");
-                first = false;
-                sb.Append($"\"{kvp.Key}\":");
-                sb.Append(SerializeValue(kvp.Value));
-            }
-            sb.Append("}");
-            return sb.ToString();
+            return value.ToString(CultureInfo.InvariantCulture);
         }
 
-        private string SerializeValue(object value)
+        private static Dictionary<string, object> ParseJson(string json)
         {
-            if (value == null) return "null";
-            if (value is string s) return $"\"{EscapeString(s)}\"";
-            if (value is bool b) return b ? "true" : "false";
-            if (value is int or long or float or double) return value.ToString();
-            if (value is Dictionary<string, object> dict) return SerializeToJson(dict);
-            if (value is Dictionary<string, string> sdict)
-            {
-                var sb = new StringBuilder("{");
-                var first = true;
-                foreach (var kvp in sdict)
-                {
-                    if (!first) sb.Append(",");
-                    first = false;
-                    sb.Append($"\"{kvp.Key}\":\"{EscapeString(kvp.Value)}\"");
-                }
-                sb.Append("}");
-                return sb.ToString();
-            }
-            if (value is IList<Dictionary<string, string>> list)
-            {
-                var sb = new StringBuilder("[");
-                for (int i = 0; i < list.Count; i++)
-                {
-                    if (i > 0) sb.Append(",");
-                    sb.Append(SerializeValue(list[i]));
-                }
-                sb.Append("]");
-                return sb.ToString();
-            }
-            if (value is IList<string> strList)
-            {
-                var sb = new StringBuilder("[");
-                for (int i = 0; i < strList.Count; i++)
-                {
-                    if (i > 0) sb.Append(",");
-                    sb.Append($"\"{EscapeString(strList[i])}\"");
-                }
-                sb.Append("]");
-                return sb.ToString();
-            }
-            if (value is IList<object> objList)
-            {
-                var sb = new StringBuilder("[");
-                for (int i = 0; i < objList.Count; i++)
-                {
-                    if (i > 0) sb.Append(",");
-                    sb.Append(SerializeValue(objList[i]));
-                }
-                sb.Append("]");
-                return sb.ToString();
-            }
-            return $"\"{value}\"";
-        }
-
-        private string EscapeString(string s)
-        {
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
-        }
-
-        // Simple JSON parsing
-        private Dictionary<string, object> ParseJson(string json)
-        {
-            // For production, consider using a proper JSON library like Newtonsoft.Json
-            // This is a simplified parser for basic responses
+            if (string.IsNullOrEmpty(json)) return new Dictionary<string, object>();
             return MiniJson.Deserialize(json) as Dictionary<string, object> ?? new Dictionary<string, object>();
         }
 
@@ -1245,6 +1070,9 @@ namespace Tuteliq
             return new BullyingResult
             {
                 IsBullying = GetBool(data, "is_bullying"),
+                BullyingReported = GetBool(data, "bullying_reported"),
+                BullyingReportedBy = GetString(data, "bullying_reported_by"),
+                SpeakerRole = GetString(data, "speaker_role"),
                 Severity = EnumExtensions.ParseSeverity(GetString(data, "severity")),
                 BullyingType = GetStringList(data, "bullying_type"),
                 Confidence = GetFloat(data, "confidence"),
@@ -1270,6 +1098,7 @@ namespace Tuteliq
                 Rationale = GetString(data, "rationale"),
                 RiskScore = GetFloat(data, "risk_score"),
                 RecommendedAction = GetString(data, "recommended_action"),
+                MessageAnalysis = ParseMessageAnalysisList(data),
                 Language = GetString(data, "language"),
                 LanguageStatus = GetString(data, "language_status"),
                 CreditsUsed = GetNullableInt(data, "credits_used"),
@@ -1471,24 +1300,27 @@ namespace Tuteliq
 
         private DetectionResult ParseDetectionResult(Dictionary<string, object> data)
         {
-            var result = new DetectionResult
-            {
-                Endpoint = GetString(data, "endpoint"),
-                Detected = GetBool(data, "detected"),
-                Severity = GetDouble(data, "severity"),
-                Confidence = GetDouble(data, "confidence"),
-                RiskScore = GetDouble(data, "risk_score"),
-                Level = GetString(data, "level"),
-                RecommendedAction = GetString(data, "recommended_action"),
-                Rationale = GetString(data, "rationale"),
-                Language = GetString(data, "language"),
-                LanguageStatus = GetString(data, "language_status"),
-                CreditsUsed = GetNullableInt(data, "credits_used"),
-                ProcessingTimeMs = GetNullableDouble(data, "processing_time_ms"),
-                ExternalId = GetString(data, "external_id"),
-                CustomerId = GetString(data, "customer_id"),
-                Metadata = GetDict(data, "metadata")
-            };
+            return FillDetectionResult(new DetectionResult(), data);
+        }
+
+        private T FillDetectionResult<T>(T result, Dictionary<string, object> data) where T : DetectionResult
+        {
+            result.Endpoint = GetString(data, "endpoint");
+            result.Detected = GetBool(data, "detected");
+            result.Severity = GetDouble(data, "severity");
+            result.Confidence = GetDouble(data, "confidence");
+            result.RiskScore = GetDouble(data, "risk_score");
+            result.Level = GetString(data, "level");
+            result.RecommendedAction = GetString(data, "recommended_action");
+            result.Rationale = GetString(data, "rationale");
+            result.Language = GetString(data, "language");
+            result.LanguageStatus = GetString(data, "language_status");
+            result.MessageAnalysis = ParseMessageAnalysisList(data);
+            result.CreditsUsed = GetNullableInt(data, "credits_used");
+            result.ProcessingTimeMs = GetNullableDouble(data, "processing_time_ms");
+            result.ExternalId = GetString(data, "external_id");
+            result.CustomerId = GetString(data, "customer_id");
+            result.Metadata = GetDict(data, "metadata");
 
             var categories = new List<DetectionCategory>();
             if (data.ContainsKey("categories") && data["categories"] is IList<object> catList)
@@ -1602,10 +1434,13 @@ namespace Tuteliq
             return new WebhookInfo
             {
                 Id = GetString(data, "id"),
+                Name = GetString(data, "name"),
                 Url = GetString(data, "url"),
                 Events = GetStringList(data, "events"),
-                Active = GetBool(data, "active"),
-                Secret = GetString(data, "secret"),
+                IsActive = GetBool(data, "is_active"),
+                FailureCount = GetInt(data, "failure_count"),
+                LastTriggeredAt = GetString(data, "last_triggered_at"),
+                LastError = GetString(data, "last_error"),
                 CreatedAt = GetString(data, "created_at"),
                 UpdatedAt = GetString(data, "updated_at")
             };
@@ -1623,28 +1458,6 @@ namespace Tuteliq
                 }
             }
             return new WebhookListResult { Webhooks = webhooks };
-        }
-
-        private CreateWebhookResult ParseCreateWebhookResult(Dictionary<string, object> data)
-        {
-            var result = new CreateWebhookResult
-            {
-                Message = GetString(data, "message")
-            };
-            if (data.ContainsKey("webhook") && data["webhook"] is Dictionary<string, object> dict)
-                result.Webhook = ParseWebhookInfo(dict);
-            return result;
-        }
-
-        private UpdateWebhookResult ParseUpdateWebhookResult(Dictionary<string, object> data)
-        {
-            var result = new UpdateWebhookResult
-            {
-                Message = GetString(data, "message")
-            };
-            if (data.ContainsKey("webhook") && data["webhook"] is Dictionary<string, object> dict)
-                result.Webhook = ParseWebhookInfo(dict);
-            return result;
         }
 
         private PricingResult ParsePricingResult(Dictionary<string, object> data)
@@ -1764,7 +1577,7 @@ namespace Tuteliq
             {
                 if (value is float f) return f;
                 if (value is double d) return (float)d;
-                if (float.TryParse(value?.ToString(), out var parsed)) return parsed;
+                if (float.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             return 0f;
         }
@@ -1794,7 +1607,7 @@ namespace Tuteliq
                 if (value is long l) return (int)l;
                 if (value is int i) return i;
                 if (value is double d) return (int)d;
-                if (int.TryParse(value?.ToString(), out var parsed)) return parsed;
+                if (int.TryParse(value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             return 0;
         }
@@ -1806,7 +1619,7 @@ namespace Tuteliq
                 if (value is double d) return d;
                 if (value is float f) return f;
                 if (value is long l) return l;
-                if (double.TryParse(value?.ToString(), out var parsed)) return parsed;
+                if (double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             return 0.0;
         }
@@ -1818,7 +1631,7 @@ namespace Tuteliq
                 if (value is int i) return i;
                 if (value is long l) return (int)l;
                 if (value is double d) return (int)d;
-                if (int.TryParse(value.ToString(), out var parsed)) return parsed;
+                if (int.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             return null;
         }
@@ -1830,7 +1643,7 @@ namespace Tuteliq
                 if (value is double d) return d;
                 if (value is float f) return f;
                 if (value is long l) return l;
-                if (double.TryParse(value.ToString(), out var parsed)) return parsed;
+                if (double.TryParse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
             }
             return null;
         }
@@ -1845,6 +1658,68 @@ namespace Tuteliq
             return null;
         }
 
+        private static long? GetNullableLong(Dictionary<string, object> data, string key)
+        {
+            if (data.TryGetValue(key, out var value) && value != null)
+            {
+                if (value is long l) return l;
+                if (value is int i) return i;
+                if (value is double d) return (long)d;
+                if (long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+            }
+            return null;
+        }
+
+        private static List<T> GetList<T>(Dictionary<string, object> data, string key, Func<Dictionary<string, object>, T> parse)
+        {
+            var result = new List<T>();
+            if (data.TryGetValue(key, out var value) && value is IList<object> items)
+            {
+                foreach (var item in items)
+                {
+                    if (item is Dictionary<string, object> dict)
+                        result.Add(parse(dict));
+                }
+            }
+            return result;
+        }
+
+        private static T GetObject<T>(Dictionary<string, object> data, string key, Func<Dictionary<string, object>, T> parse) where T : class
+        {
+            return data.TryGetValue(key, out var value) && value is Dictionary<string, object> dict ? parse(dict) : null;
+        }
+
+        private static object GetRaw(Dictionary<string, object> data, string key)
+        {
+            return data.TryGetValue(key, out var value) ? value : null;
+        }
+
+        private static List<MessageAnalysis> ParseMessageAnalysisList(Dictionary<string, object> data)
+        {
+            if (!data.ContainsKey("message_analysis")) return null;
+            return GetList(data, "message_analysis", item => new MessageAnalysis
+            {
+                MessageIndex = GetInt(item, "message_index"),
+                RiskScore = GetFloat(item, "risk_score"),
+                Flags = GetStringList(item, "flags"),
+                Summary = GetString(item, "summary")
+            });
+        }
+
+        /// <summary>
+        /// "?a=1&amp;b=2" from the pairs whose value is set, values URL-encoded; "" when none are.
+        /// </summary>
+        private static string BuildQuery(params (string Key, string Value)[] pairs)
+        {
+            var parts = new List<string>();
+            foreach (var (key, value) in pairs)
+            {
+                if (!string.IsNullOrEmpty(value))
+                    parts.Add($"{key}={Uri.EscapeDataString(value)}");
+            }
+            return parts.Count > 0 ? "?" + string.Join("&", parts) : "";
+        }
+
         private static Dictionary<string, int> GetIntDict(Dictionary<string, object> data, string key)
         {
             var result = new Dictionary<string, int>();
@@ -1855,16 +1730,10 @@ namespace Tuteliq
                     if (kvp.Value is long l) result[kvp.Key] = (int)l;
                     else if (kvp.Value is int i) result[kvp.Key] = i;
                     else if (kvp.Value is double d) result[kvp.Key] = (int)d;
-                    else if (int.TryParse(kvp.Value?.ToString(), out var parsed)) result[kvp.Key] = parsed;
+                    else if (int.TryParse(kvp.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) result[kvp.Key] = parsed;
                 }
             }
             return result;
-        }
-
-        [Serializable]
-        private class JsonWrapper
-        {
-            public Dictionary<string, object> data;
         }
     }
 }

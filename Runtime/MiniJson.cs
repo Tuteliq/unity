@@ -28,6 +28,7 @@ namespace Tuteliq
         private sealed class Parser : IDisposable
         {
             private const string WORD_BREAK = "{}[],:\"";
+            private static readonly char[] FractionOrExponent = { '.', 'e', 'E' };
             private StringReader json;
 
             private Parser(string jsonString)
@@ -209,9 +210,10 @@ namespace Tuteliq
             {
                 var number = NextWord;
 
-                if (number.IndexOf('.') == -1)
+                if (number.IndexOfAny(FractionOrExponent) == -1)
                 {
-                    if (long.TryParse(number, out long parsedLong))
+                    if (long.TryParse(number, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out long parsedLong))
                         return parsedLong;
                     return 0;
                 }
@@ -466,7 +468,7 @@ namespace Tuteliq
                 }
                 else if (value is int or long or byte or sbyte or short or ushort or uint or ulong)
                 {
-                    builder.Append(value);
+                    builder.Append(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture));
                 }
                 else if (value is decimal dec)
                 {
