@@ -205,3 +205,63 @@ namespace Tuteliq.Tests
         }
     }
 }
+
+namespace Tuteliq.Tests
+{
+    // Calls that create or change something are not repeated when the API may have
+    // acted on them (5xx, network error, timeout). A 429 means nothing ran, so it is retried.
+    public class StateChangingRetryTests
+    {
+        private static readonly Dictionary<string, Func<TuteliqClient, object>> Calls = new Dictionary<string, Func<TuteliqClient, object>>
+        {
+            { "create webhook", c => c.CreateWebhookAsync(new CreateWebhookInput { Name = "n", Url = "https://example.com/h", Events = new List<string> { "incident.created" } }) },
+            { "test webhook", c => c.TestWebhookAsync("wh_1") },
+            { "regenerate secret", c => c.RegenerateWebhookSecretAsync("wh_1") },
+            { "record consent", c => c.RecordConsentAsync(new RecordConsentInput { ConsentType = "analytics", Version = "1" }) },
+            { "log breach", c => c.LogBreachAsync(new LogBreachInput()) },
+            { "review incident", c => c.ReviewIncidentAsync("inc_1", new ReviewIncidentInput { Action = ModeratorAction.Confirm, ModeratorExternalId = "mod_1" }) },
+        };
+
+        public static IEnumerable<string> Names => Calls.Keys;
+
+        private static void Send(TuteliqClient client, string name) => ((System.Threading.Tasks.Task)Calls[name](client)).GetAwaiter().GetResult();
+
+        [TestCaseSource(nameof(Names))]
+        public void ServerError_IsNotRepeated(string name)
+        {
+            var transport = new FakeTransport().Respond(503, "{}").Respond(200, "{}");
+
+            Assert.Throws<ServerException>(() => Send(TestClient.Create(transport), name));
+            Assert.AreEqual(1, transport.Requests.Count);
+        }
+
+        [TestCaseSource(nameof(Names))]
+        public void NetworkError_IsNotRepeated(string name)
+        {
+            var transport = new FakeTransport().FailWithNetworkError().Respond(200, "{}");
+
+            Assert.Throws<NetworkException>(() => Send(TestClient.Create(transport), name));
+            Assert.AreEqual(1, transport.Requests.Count);
+        }
+
+        [TestCaseSource(nameof(Names))]
+        public void RateLimit_IsRetried(string name)
+        {
+            var transport = new FakeTransport().Respond(429, "{}", ("Retry-After", "1")).Respond(200, "{}");
+
+            Send(TestClient.Create(transport), name);
+
+            Assert.AreEqual(2, transport.Requests.Count);
+        }
+
+        [Test]
+        public void ReadsAndDetections_StillRetryServerErrors()
+        {
+            var transport = new FakeTransport().Respond(503, "{}").Respond(200, "{\"webhooks\":[]}");
+
+            TestClient.Run(TestClient.Create(transport).ListWebhooksAsync());
+
+            Assert.AreEqual(2, transport.Requests.Count);
+        }
+    }
+}

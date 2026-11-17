@@ -471,7 +471,7 @@ Every result type includes a `CreditsUsed` field showing the credits consumed by
 
 The SDK reads the API's error envelope: each exception carries `Message`, `Code`, `Details`, `HttpStatus` and `RequestId`.
 
-Rate limits (429), server errors (5xx), network errors and timeouts are retried automatically, waiting for the `Retry-After` the API sends (up to 60 seconds) or backing off exponentially. Other errors are thrown at once, so a request the API has answered is never sent again.
+Rate limits (429), server errors (5xx), network errors and timeouts are retried automatically, waiting for the `Retry-After` the API sends (up to 60 seconds) or backing off exponentially. Calls that create or change something (creating, testing or regenerating a webhook, recording consent, logging a breach, reviewing incidents) are retried only after a rate limit, because the API may already have acted on them after a server error, network error or timeout. Other errors are thrown at once, so a request the API has answered is never sent again.
 
 ```csharp
 using Tuteliq;

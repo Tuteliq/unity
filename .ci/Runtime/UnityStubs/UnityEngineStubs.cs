@@ -8,6 +8,11 @@ namespace UnityEngine
 {
     public class MonoBehaviour { }
 
+    public static class Time
+    {
+        public static float realtimeSinceStartup => 0f;
+    }
+
     public sealed class SerializeFieldAttribute : Attribute { }
 
     public static class Debug
