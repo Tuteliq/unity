@@ -12,6 +12,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Runtime/**/*.cs" />
+    <Compile Include="../../Samples~/**/*.cs" />
     <Compile Include="UnityStubs/**/*.cs" />
   </ItemGroup>
 </Project>

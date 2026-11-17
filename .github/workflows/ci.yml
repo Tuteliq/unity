@@ -32,6 +32,29 @@ jobs:
           done
           echo "All required files present"
 
+      # Unity ignores assets without a .meta file in a package installed from git.
+      # Every tracked file needs one, and so does every folder above it, except
+      # paths with a component that starts with "." or ends with "~" (Unity skips those).
+      - name: Check .meta files
+        run: |
+          git ls-files | grep -v '\.meta$' | grep -Ev '(^|/)(\.[^/]*|[^/]*~)(/|$)' | while read -r path; do
+            echo "$path"
+            dir=$(dirname "$path")
+            while [ "$dir" != "." ]; do
+              echo "$dir"
+              dir=$(dirname "$dir")
+            done
+          done | sort -u > "$RUNNER_TEMP/needs-meta.txt"
+          missing=0
+          while read -r item; do
+            if [ ! -f "$item.meta" ]; then
+              echo "Missing $item.meta"
+              missing=1
+            fi
+          done < "$RUNNER_TEMP/needs-meta.txt"
+          [ "$missing" -eq 0 ] || exit 1
+          echo "All .meta files present"
+
       - name: Validate assembly definitions
         run: |
           for asmdef in $(find . -name "*.asmdef"); do

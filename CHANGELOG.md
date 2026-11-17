@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `.meta` files for the package, so installs from a git URL import the scripts. CI checks that every package file has one.
+- The logo moved from `assets/` to `Documentation~/`, which Unity skips, so no asset in the package is left without a `.meta`.
+- The `Basic Usage` sample listed in `package.json` (`Samples~/BasicUsage`).
+
 ## [2.5.0] - 2026-11-17
 
 ### Fixed
