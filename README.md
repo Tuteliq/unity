@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/logo.png" alt="Tuteliq" width="200" />
+  <img src="./Documentation~/logo.png" alt="Tuteliq" width="200" />
 </p>
 
 <h1 align="center">Tuteliq Unity SDK</h1>

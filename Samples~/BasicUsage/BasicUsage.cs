@@ -17,6 +17,12 @@ public class BasicUsage : MonoBehaviour
 
     private async void Start()
     {
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError("Set an API key on the BasicUsage component.");
+            return;
+        }
+
         var client = new TuteliqClient(apiKey, baseUrl: baseUrl);
 
         try
