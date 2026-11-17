@@ -219,6 +219,7 @@ namespace Tuteliq.Tests
             { "regenerate secret", c => c.RegenerateWebhookSecretAsync("wh_1") },
             { "record consent", c => c.RecordConsentAsync(new RecordConsentInput { ConsentType = "analytics", Version = "1" }) },
             { "log breach", c => c.LogBreachAsync(new LogBreachInput()) },
+            { "batch review incidents", c => c.BatchReviewIncidentsAsync(new BatchReviewIncidentsInput { IncidentIds = new List<string> { "inc_1" }, Action = ModeratorAction.Confirm, ModeratorExternalId = "mod_1" }) },
             { "review incident", c => c.ReviewIncidentAsync("inc_1", new ReviewIncidentInput { Action = ModeratorAction.Confirm, ModeratorExternalId = "mod_1" }) },
         };
 
@@ -245,11 +246,30 @@ namespace Tuteliq.Tests
         }
 
         [TestCaseSource(nameof(Names))]
+        public void Timeout_IsNotRepeated(string name)
+        {
+            var transport = new FakeTransport().FailWithTimeout().Respond(200, "{}");
+
+            Assert.Throws<TimeoutException>(() => Send(TestClient.Create(transport), name));
+            Assert.AreEqual(1, transport.Requests.Count);
+        }
+
+        [TestCaseSource(nameof(Names))]
         public void RateLimit_IsRetried(string name)
         {
             var transport = new FakeTransport().Respond(429, "{}", ("Retry-After", "1")).Respond(200, "{}");
 
             Send(TestClient.Create(transport), name);
+
+            Assert.AreEqual(2, transport.Requests.Count);
+        }
+
+        [Test]
+        public void Reads_StillRetryTimeouts()
+        {
+            var transport = new FakeTransport().FailWithTimeout().Respond(200, "{\"webhooks\":[]}");
+
+            TestClient.Run(TestClient.Create(transport).ListWebhooksAsync());
 
             Assert.AreEqual(2, transport.Requests.Count);
         }

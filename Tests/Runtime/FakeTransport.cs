@@ -26,6 +26,12 @@ namespace Tuteliq.Tests
             return this;
         }
 
+        public FakeTransport FailWithTimeout()
+        {
+            _responses.Enqueue(new TransportResponse { TransportError = "Request timeout", TimedOut = true });
+            return this;
+        }
+
         public Task<TransportResponse> SendAsync(TransportRequest request)
         {
             Requests.Add(request);
