@@ -273,6 +273,7 @@ namespace Tuteliq
 
             if (input.ChildAge.HasValue) body["child_age"] = input.ChildAge.Value;
             if (input.Severity.HasValue) body["severity"] = input.Severity.Value.ToApiString();
+            if (!string.IsNullOrEmpty(input.Country)) body["country"] = input.Country;
             if (input.ExternalId != null) body["external_id"] = input.ExternalId;
             if (input.CustomerId != null) body["customer_id"] = input.CustomerId;
             if (input.Metadata != null) body["metadata"] = input.Metadata;
@@ -1176,6 +1177,7 @@ namespace Tuteliq
                 Tone = GetString(data, "tone"),
                 Resources = GetStringList(data, "resources"),
                 Urgency = GetString(data, "urgency"),
+                GeneralGuidance = GetBool(data, "general_guidance"),
                 CreditsUsed = GetNullableInt(data, "credits_used"),
                 ExternalId = GetString(data, "external_id"),
                 CustomerId = GetString(data, "customer_id"),

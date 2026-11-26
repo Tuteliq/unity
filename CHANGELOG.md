@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `GetActionPlanInput.Country` (ISO 3166-1 alpha-2, e.g. `"SE"`), so the plan names that country's helplines and emergency number. It defaults to the account's country.
+- `ActionPlanResult.GeneralGuidance`: true when the plan is general guidance for any harm, given because a plan tailored to the situation could not be written.
+
 ## [2.5.1] - 2026-11-17
 
 ### Fixed
