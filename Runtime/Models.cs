@@ -164,6 +164,11 @@ namespace Tuteliq
         public int? ChildAge;
         public Audience? Audience;
         public Severity? Severity;
+        /// <summary>
+        /// The family's country (ISO 3166-1 alpha-2, e.g. "SE"), so the plan names that country's
+        /// helplines and emergency number. Defaults to the account's country.
+        /// </summary>
+        public string Country;
         public string ExternalId;
         /// <summary>Your end-customer identifier for multi-tenant / B2B2C routing (max 255 chars).</summary>
         public string CustomerId;
@@ -321,6 +326,11 @@ namespace Tuteliq
         public string Tone;
         public List<string> Resources;
         public string Urgency;
+        /// <summary>
+        /// True when the plan is general guidance for any harm, given because a plan tailored to
+        /// the situation could not be written. False when the API leaves it out.
+        /// </summary>
+        public bool GeneralGuidance;
         public int? CreditsUsed;
         public string ExternalId;
         public string CustomerId;

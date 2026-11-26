@@ -549,4 +549,49 @@ namespace Tuteliq.Tests
             Assert.AreEqual(0, transport.Requests.Count);
         }
     }
+
+    public class ActionPlanRequestTests
+    {
+        private const string Plan = "{\"audience\":\"parent\",\"steps\":[\"Stay calm.\"],\"tone\":\"supportive\"";
+
+        private static Dictionary<string, object> BodyFor(GetActionPlanInput input)
+        {
+            var transport = new FakeTransport().Respond(200, Plan + "}");
+            TestClient.Run(TestClient.Create(transport).GetActionPlanAsync(input));
+            return transport.LastBody;
+        }
+
+        private static ActionPlanResult ResultFor(string response)
+        {
+            var transport = new FakeTransport().Respond(200, response);
+            return TestClient.Run(TestClient.Create(transport)
+                .GetActionPlanAsync(new GetActionPlanInput { Situation = "A worry" }));
+        }
+
+        [Test]
+        public void GetActionPlan_SendsCountry()
+        {
+            var body = BodyFor(new GetActionPlanInput { Situation = "A worry", Country = "SE" });
+            Assert.AreEqual("SE", body["country"]);
+        }
+
+        [Test]
+        public void GetActionPlan_LeavesOutCountryWhenNotSet()
+        {
+            var body = BodyFor(new GetActionPlanInput { Situation = "A worry" });
+            Assert.IsFalse(body.ContainsKey("country"));
+        }
+
+        [Test]
+        public void GetActionPlan_ReadsGeneralGuidance()
+        {
+            Assert.IsTrue(ResultFor(Plan + ",\"general_guidance\":true}").GeneralGuidance);
+        }
+
+        [Test]
+        public void GetActionPlan_TailoredPlanIsNotGeneralGuidance()
+        {
+            Assert.IsFalse(ResultFor(Plan + "}").GeneralGuidance);
+        }
+    }
 }

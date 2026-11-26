@@ -307,11 +307,14 @@ var plan = await client.GetActionPlanAsync(new GetActionPlanInput
     Situation = "Someone is spreading rumors about me",
     ChildAge = 12,
     Audience = Audience.Child,
-    Severity = Severity.Medium
+    Severity = Severity.Medium,
+    Country = "SE" // optional, ISO 3166-1 alpha-2
 });
 
 Debug.Log($"Steps: {string.Join("\n", plan.Steps)}");
 ```
+
+`Country` is the family's country, so the plan names that country's helplines and emergency number. It defaults to the account's country; with neither, the plan names the kind of service to contact. `plan.GeneralGuidance` is `true` when the plan is general guidance for any harm, given because a plan tailored to the situation could not be written.
 
 ### Incident Report
 
